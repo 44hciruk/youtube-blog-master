@@ -1,0 +1,141 @@
+import { useState } from 'react';
+import { trpc } from '../lib/trpc';
+import { useToast } from '../components/Toast';
+
+export default function ApiSettings() {
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [youtubeKey, setYoutubeKey] = useState('');
+  const { showToast, ToastContainer } = useToast();
+
+  const apiKeysQuery = trpc.user.getApiKeys.useQuery();
+  const saveMutation = trpc.user.saveApiKeys.useMutation({
+    onSuccess: () => {
+      showToast('APIキーを保存しました', 'success');
+      setOpenaiKey('');
+      setYoutubeKey('');
+      apiKeysQuery.refetch();
+    },
+    onError: (err) => showToast(err.message, 'error'),
+  });
+  const testMutation = trpc.user.testApiKey.useMutation({
+    onSuccess: (data) => showToast(data.message, 'success'),
+    onError: (err) => showToast(err.message, 'error'),
+  });
+
+  const handleSave = () => {
+    const keys: { keyType: 'openai' | 'youtube'; apiKey: string }[] = [];
+    if (openaiKey.trim()) keys.push({ keyType: 'openai', apiKey: openaiKey.trim() });
+    if (youtubeKey.trim()) keys.push({ keyType: 'youtube', apiKey: youtubeKey.trim() });
+
+    if (keys.length === 0) {
+      showToast('APIキーを入力してください', 'error');
+      return;
+    }
+    saveMutation.mutate({ keys });
+  };
+
+  const existingKeys = apiKeysQuery.data?.keys || [];
+  const openaiKeyStatus = existingKeys.find((k) => k.keyType === 'openai');
+  const youtubeKeyStatus = existingKeys.find((k) => k.keyType === 'youtube');
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <ToastContainer />
+
+      <h2 className="text-2xl font-bold text-gray-900">API設定</h2>
+
+      {/* OpenAI API Key */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">OpenAI API Key</h3>
+          {openaiKeyStatus && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 font-mono">
+                {openaiKeyStatus.maskedKey}
+              </span>
+              <span className="w-2 h-2 bg-green-500 rounded-full" />
+            </div>
+          )}
+        </div>
+        <p className="text-sm text-gray-500 mb-3">
+          GPT-4oによる記事生成に使用します。
+          <a
+            href="https://platform.openai.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline ml-1"
+          >
+            取得はこちら
+          </a>
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={openaiKey}
+            onChange={(e) => setOpenaiKey(e.target.value)}
+            placeholder="sk-..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+          />
+          <button
+            onClick={() => testMutation.mutate({ keyType: 'openai' })}
+            disabled={testMutation.isPending}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            テスト
+          </button>
+        </div>
+      </div>
+
+      {/* YouTube API Key */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">YouTube Data API Key</h3>
+          {youtubeKeyStatus && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 font-mono">
+                {youtubeKeyStatus.maskedKey}
+              </span>
+              <span className="w-2 h-2 bg-green-500 rounded-full" />
+            </div>
+          )}
+        </div>
+        <p className="text-sm text-gray-500 mb-3">
+          動画メタデータ・字幕の取得に使用します。
+          <a
+            href="https://console.cloud.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline ml-1"
+          >
+            取得はこちら
+          </a>
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={youtubeKey}
+            onChange={(e) => setYoutubeKey(e.target.value)}
+            placeholder="AIza..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+          />
+          <button
+            onClick={() => testMutation.mutate({ keyType: 'youtube' })}
+            disabled={testMutation.isPending}
+            className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          >
+            テスト
+          </button>
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <button
+        onClick={handleSave}
+        disabled={saveMutation.isPending || (!openaiKey.trim() && !youtubeKey.trim())}
+        className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {saveMutation.isPending ? '保存中...' : '保存'}
+      </button>
+    </div>
+  );
+}
