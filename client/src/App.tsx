@@ -42,7 +42,8 @@ function App() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-gray-900 hover:text-gray-700">
+          <Link to="/" className="flex items-center gap-2 text-xl font-bold text-gray-900 hover:text-gray-700">
+            <img src="/logo.svg" alt="TubeBlogGenerator" className="h-7 w-auto" />
             TubeBlogGenerator
           </Link>
           <div className="flex items-center gap-6">
