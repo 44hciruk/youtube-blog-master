@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import packageJson from '../../../package.json';
 
 interface LoginProps {
   onLogin: (userId: number, name: string) => void;
@@ -46,9 +47,9 @@ export default function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center relative">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">YouTube to Blog Master</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">TubeBlogGenerator</h1>
         <p className="text-sm text-gray-500 mb-8">名前を入力してログインしてください</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -82,6 +83,9 @@ export default function Login({ onLogin }: LoginProps) {
         <p className="text-xs text-gray-400 mt-6 text-center">
           ※ 仲間内での利用を想定しています
         </p>
+      </div>
+      <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-400">
+        &copy; 2026 TubeBlogGenerator &nbsp;|&nbsp; Created by Dr.SK &nbsp;|&nbsp; v{packageJson.version}
       </div>
     </div>
   );
