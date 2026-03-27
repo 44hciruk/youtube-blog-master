@@ -20,6 +20,10 @@ const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({
       url: '/api/trpc',
+      headers: () => {
+        const userId = localStorage.getItem('userId');
+        return userId ? { 'x-user-id': userId } : {};
+      },
     }),
   ],
 });

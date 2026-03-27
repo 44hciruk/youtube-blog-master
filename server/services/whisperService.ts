@@ -1,5 +1,10 @@
 import OpenAI from 'openai';
-import { Readable } from 'stream';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import YTDlpWrap from 'yt-dlp-wrap';
+
+const YT_DLP_PATH = process.env.YT_DLP_PATH || '/opt/homebrew/bin/yt-dlp';
 
 /**
  * Transcribe audio using OpenAI Whisper API.
@@ -12,7 +17,6 @@ export async function transcribeAudio(
 ): Promise<{ transcript: string; language: string }> {
   const openai = new OpenAI({ apiKey });
 
-  // Create a File object from the buffer
   const file = new File([new Uint8Array(audioBuffer)], 'audio.mp3', { type: 'audio/mpeg' });
 
   const response = await openai.audio.transcriptions.create({
@@ -29,19 +33,90 @@ export async function transcribeAudio(
 }
 
 /**
- * Download audio from YouTube video.
- * Note: In production, you would use ytdl-core or a similar library.
- * For now, this is a placeholder that should be integrated with
- * an appropriate audio extraction service.
+ * Download audio from YouTube video using yt-dlp, save as temp file,
+ * transcribe with Whisper, then delete the temp file.
+ */
+export async function downloadAndTranscribe(
+  videoId: string,
+  apiKey: string,
+  language?: string,
+): Promise<{ transcript: string; language: string }> {
+  const tmpDir = os.tmpdir();
+  const tmpFile = path.join(tmpDir, `ytbm_${videoId}_${Date.now()}`);
+  const audioFile = `${tmpFile}.webm`;
+
+  try {
+    // Download audio-only stream via yt-dlp
+    const ytDlp = new YTDlpWrap(YT_DLP_PATH);
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    await ytDlp.execPromise([
+      videoUrl,
+      '--format', 'bestaudio[ext=webm]/bestaudio/best',
+      '--output', audioFile,
+      '--no-playlist',
+      '--quiet',
+    ]);
+
+    if (!fs.existsSync(audioFile)) {
+      throw new Error('音声ファイルのダウンロードに失敗しました');
+    }
+
+    const audioBuffer = fs.readFileSync(audioFile);
+    const openai = new OpenAI({ apiKey });
+
+    // Upload as a File object with webm mime type
+    const file = new File([new Uint8Array(audioBuffer)], 'audio.webm', { type: 'audio/webm' });
+
+    const response = await openai.audio.transcriptions.create({
+      file,
+      model: 'whisper-1',
+      language: language || undefined,
+      response_format: 'verbose_json',
+    });
+
+    return {
+      transcript: response.text,
+      language: (response as unknown as Record<string, string>).language || language || 'ja',
+    };
+  } finally {
+    // Always clean up temp file
+    if (fs.existsSync(audioFile)) {
+      fs.unlinkSync(audioFile);
+    }
+  }
+}
+
+/**
+ * Legacy: Download audio buffer (kept for backward compatibility).
+ * Now delegates to downloadAndTranscribe internally.
  */
 export async function downloadAudioFromYouTube(
   videoId: string,
 ): Promise<Buffer> {
-  // This is a placeholder. In a real implementation, you would:
-  // 1. Use ytdl-core to download audio stream
-  // 2. Or use a server-side API/service for audio extraction
-  // For MVP, we rely on YouTube captions and only use Whisper as fallback
-  throw new Error(
-    '音声ダウンロードは現在利用できません。字幕のある動画を使用してください。',
-  );
+  const tmpDir = os.tmpdir();
+  const audioFile = path.join(tmpDir, `ytbm_${videoId}_${Date.now()}.webm`);
+
+  try {
+    const ytDlp = new YTDlpWrap(YT_DLP_PATH);
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    await ytDlp.execPromise([
+      videoUrl,
+      '--format', 'bestaudio[ext=webm]/bestaudio/best',
+      '--output', audioFile,
+      '--no-playlist',
+      '--quiet',
+    ]);
+
+    if (!fs.existsSync(audioFile)) {
+      throw new Error('音声ファイルのダウンロードに失敗しました');
+    }
+
+    return fs.readFileSync(audioFile);
+  } finally {
+    if (fs.existsSync(audioFile)) {
+      fs.unlinkSync(audioFile);
+    }
+  }
 }

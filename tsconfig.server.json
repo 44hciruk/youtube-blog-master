@@ -9,9 +9,9 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "outDir": "dist/server",
-    "rootDir": "server",
+    "rootDir": ".",
     "baseUrl": "."
   },
-  "include": ["server"],
+  "include": ["server", "drizzle"],
   "exclude": ["node_modules"]
 }

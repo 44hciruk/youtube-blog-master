@@ -12,6 +12,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     port: 5173,
     proxy: {
       '/api': {
@@ -23,5 +24,14 @@ export default defineConfig({
   build: {
     outDir: '../dist/client',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'trpc-vendor': ['@trpc/client', '@trpc/react-query', '@tanstack/react-query'],
+          'markdown-vendor': ['react-markdown', 'remark-gfm', 'rehype-raw', 'rehype-highlight'],
+        },
+      },
+    },
   },
 });

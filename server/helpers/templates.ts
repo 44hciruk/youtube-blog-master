@@ -18,9 +18,9 @@ export async function saveTemplate(data: SaveTemplateData) {
     decorationStrength: data.decorationStrength,
     articleLength: data.articleLength,
     seoKeywords: data.seoKeywords,
-  });
+  }).returning({ id: schema.templates.id });
 
-  return { templateId: result.insertId };
+  return { templateId: result.id };
 }
 
 export async function getTemplates(userId: number) {

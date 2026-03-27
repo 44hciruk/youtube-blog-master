@@ -22,6 +22,7 @@ interface UpdateArticleData {
   markdownContent?: string;
   wordCount?: number;
   status?: 'draft' | 'completed';
+  images?: { tag: string; base64: string }[];
 }
 
 export async function createArticle(data: CreateArticleData) {
@@ -38,9 +39,9 @@ export async function createArticle(data: CreateArticleData) {
     decorationStrength: data.decorationStrength,
     articleLength: data.articleLength,
     seoKeywords: data.seoKeywords,
-  });
+  }).returning({ id: schema.articles.id });
 
-  return { articleId: result.insertId };
+  return { articleId: result.id };
 }
 
 export async function getArticles(

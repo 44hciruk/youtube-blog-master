@@ -4,7 +4,7 @@ import { encryptApiKey, decryptApiKey, maskApiKey } from '../utils/encryption';
 
 export async function saveUserApiKey(
   userId: number,
-  keyType: 'openai' | 'youtube',
+  keyType: 'openai' | 'youtube' | 'google',
   apiKey: string,
 ) {
   const encrypted = encryptApiKey(apiKey);
@@ -16,7 +16,8 @@ export async function saveUserApiKey(
       keyType,
       encryptedKey: encrypted,
     })
-    .onDuplicateKeyUpdate({
+    .onConflictDoUpdate({
+      target: [schema.userApiKeys.userId, schema.userApiKeys.keyType],
       set: {
         encryptedKey: encrypted,
         updatedAt: new Date(),
@@ -41,7 +42,7 @@ export async function getUserApiKeys(userId: number) {
 
 export async function getDecryptedApiKey(
   userId: number,
-  keyType: 'openai' | 'youtube',
+  keyType: 'openai' | 'youtube' | 'google',
 ): Promise<string | null> {
   const [key] = await db
     .select()
@@ -60,7 +61,7 @@ export async function getDecryptedApiKey(
 
 export async function deleteUserApiKey(
   userId: number,
-  keyType: 'openai' | 'youtube',
+  keyType: 'openai' | 'youtube' | 'google',
 ) {
   await db
     .delete(schema.userApiKeys)

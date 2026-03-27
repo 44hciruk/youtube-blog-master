@@ -8,6 +8,7 @@ import { getVideoId, getVideoMetadata, getVideoTranscript } from '../services/yo
 import { normalizeTranscript, extractKeywords, extractMainPoints } from '../services/textNormalization';
 import { generateArticle } from '../services/articleGenerationService';
 import { insertImageInstructions } from '../services/imageInstructionService';
+import { generateImagesForArticle } from '../services/imageGenerationService';
 import { exportToMarkdown, exportToWordPress } from '../services/exportService';
 import { generateArticleSchema, updateArticleSchema } from '../utils/validation';
 
@@ -168,6 +169,33 @@ export const articleRouter = router({
       });
 
       return { markdownContent: updatedMarkdown };
+    }),
+
+  // Generate images for all [画像：〇〇] tags in article
+  generateImages: protectedProcedure
+    .input(z.object({ articleId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const article = await getArticleById(input.articleId, ctx.userId);
+      if (!article) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '記事が見つかりません' });
+      }
+
+      const googleApiKey = await getDecryptedApiKey(ctx.userId, 'google');
+      if (!googleApiKey) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Google APIキーが設定されていません。API設定画面から設定してください。',
+        });
+      }
+
+      try {
+        const images = await generateImagesForArticle(article.markdownContent, googleApiKey);
+        await updateArticle(input.articleId, ctx.userId, { images });
+        return { success: true, count: images.length, images };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '画像生成に失敗しました';
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });
+      }
     }),
 
   // Export article

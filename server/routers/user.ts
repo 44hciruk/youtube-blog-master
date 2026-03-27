@@ -51,6 +51,17 @@ export const userRouter = router({
           return { success: true, message: 'YouTube API接続成功' };
         }
 
+        if (input.keyType === 'google') {
+          const res = await fetch(
+            `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=dummy&q=test`,
+          );
+          // 400 (missing cx) means key is valid; 403 means invalid key
+          if (res.status === 403) {
+            throw new Error('Google API Key が無効です');
+          }
+          return { success: true, message: 'Google API接続成功' };
+        }
+
         return { success: false, message: '不明なキータイプ' };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';

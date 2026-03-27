@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import ApiSettings from './pages/ApiSettings';
 import GenerationSettings from './pages/GenerationSettings';
 import ArticleEditor from './pages/ArticleEditor';
+import Login from './pages/Login';
 
 const navItems = [
   { path: '/', label: 'ダッシュボード' },
@@ -11,6 +13,29 @@ const navItems = [
 
 function App() {
   const location = useLocation();
+  const [userId, setUserId] = useState<number | null>(() => {
+    const stored = localStorage.getItem('userId');
+    return stored ? Number(stored) : null;
+  });
+  const [userName, setUserName] = useState<string>(() => {
+    return localStorage.getItem('userName') || '';
+  });
+
+  const handleLogin = (id: number, name: string) => {
+    setUserId(id);
+    setUserName(name);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('userId');
+    localStorage.removeItem('userName');
+    setUserId(null);
+    setUserName('');
+  };
+
+  if (!userId) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -19,21 +44,32 @@ function App() {
           <Link to="/" className="text-xl font-bold text-gray-900 hover:text-gray-700">
             YouTube to Blog Master
           </Link>
-          <nav className="flex gap-4">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`text-sm font-medium transition-colors ${
-                  location.pathname === item.path
-                    ? 'text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
+          <div className="flex items-center gap-6">
+            <nav className="flex gap-4">
+              {navItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`text-sm font-medium transition-colors ${
+                    location.pathname === item.path
+                      ? 'text-blue-600'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span>{userName}</span>
+              <button
+                onClick={handleLogout}
+                className="text-xs text-gray-400 hover:text-gray-600"
               >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+                ログアウト
+              </button>
+            </div>
+          </div>
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-4 py-8">

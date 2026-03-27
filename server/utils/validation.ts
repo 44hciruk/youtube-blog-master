@@ -35,7 +35,7 @@ export const youtubeUrlSchema = z.string().url().refine(isValidYouTubeUrl, {
   message: '無効なYouTube URLです',
 });
 
-export const apiKeyTypeSchema = z.enum(['openai', 'youtube']);
+export const apiKeyTypeSchema = z.enum(['openai', 'youtube', 'google']);
 
 export const saveApiKeysSchema = z.object({
   keys: z.array(

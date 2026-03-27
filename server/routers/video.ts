@@ -4,6 +4,7 @@ import { router, protectedProcedure } from '../trpc';
 import { getDecryptedApiKey } from '../helpers/apiKeys';
 import { getVideoId, getVideoMetadata, getVideoTranscript } from '../services/youtubeService';
 import { normalizeTranscript, extractKeywords, extractMainPoints } from '../services/textNormalization';
+import { downloadAndTranscribe } from '../services/whisperService';
 import { youtubeUrlSchema } from '../utils/validation';
 
 export const videoRouter = router({
@@ -44,11 +45,14 @@ export const videoRouter = router({
                 message: 'この動画には字幕がありません。音声認識にはOpenAI APIキーが必要です。',
               });
             }
-            // For now, throw an error since audio download is not yet implemented
-            throw new TRPCError({
-              code: 'UNPROCESSABLE_CONTENT',
-              message: '字幕・音声を取得できませんでした。字幕のある動画を使用してください。',
-            });
+            try {
+              const whisperResult = await downloadAndTranscribe(videoId, openaiApiKey);
+              transcript = whisperResult.transcript;
+              language = whisperResult.language;
+            } catch (whisperError) {
+              const msg = whisperError instanceof Error ? whisperError.message : '音声認識に失敗しました';
+              throw new TRPCError({ code: 'UNPROCESSABLE_CONTENT', message: msg });
+            }
           }
           throw error;
         }
