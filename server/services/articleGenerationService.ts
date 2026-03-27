@@ -30,6 +30,7 @@ interface GeneratedArticle {
   markdownContent: string;
   htmlContent: string;
   wordCount: number;
+  metaDescription: string;
 }
 
 /**
@@ -66,7 +67,7 @@ export async function generateArticle(
     ),
   ]);
 
-  // Step 3: Compose the article
+  // Step 3: Compose the article with fixed 3-part structure
   const title = generateTitle(videoData.title, settings.seoKeywords);
   const markdown = composeMarkdown({
     title,
@@ -86,6 +87,7 @@ export async function generateArticle(
     markdownContent: markdown,
     htmlContent: '', // Will be rendered on frontend
     wordCount,
+    metaDescription: transformed.metaDescription,
   };
 }
 
@@ -111,7 +113,10 @@ function generateTitle(originalTitle: string, seoKeywords: string[]): string {
 }
 
 /**
- * Compose full markdown article from all sections
+ * Compose full markdown article with fixed 3-part structure:
+ * 1. 冒頭：結論・この記事でわかること
+ * 2. 中盤：詳細解説（H2で2〜4セクション）
+ * 3. 末尾：まとめ・読者へのアクション提案
  */
 function composeMarkdown(data: {
   title: string;
@@ -125,10 +130,12 @@ function composeMarkdown(data: {
 }): string {
   const sections: string[] = [];
 
-  // Title
+  // ========================================
+  // Part 1: 冒頭 — 結論・この記事でわかること
+  // ========================================
   sections.push(`# ${data.title}\n`);
 
-  // Introduction
+  // Lead paragraph: what readers will learn
   const introLength = data.articleLength === 'long' ? 3 : 2;
   const introSentences = data.coreKnowledge
     .split(/[。\n]/)
@@ -136,22 +143,26 @@ function composeMarkdown(data: {
     .slice(0, introLength);
   sections.push(introSentences.join('。') + '。\n');
 
-  // Core knowledge section
-  sections.push(`## 知っておくべきポイント\n`);
-  sections.push(data.coreKnowledge + '\n');
-
-  // Key insights as a list
+  // "What you'll learn" box
   if (data.keyInsights.length > 0) {
-    sections.push(`### 重要ポイントまとめ\n`);
-    for (const insight of data.keyInsights) {
+    sections.push(`**この記事でわかること：**\n`);
+    for (const insight of data.keyInsights.slice(0, 5)) {
       sections.push(`- ${insight}`);
     }
     sections.push('');
   }
 
+  // ========================================
+  // Part 2: 中盤 — 詳細解説（H2で2〜4セクション）
+  // ========================================
+
+  // Core knowledge section
+  sections.push(`## 押さえておくべきポイントとは\n`);
+  sections.push(data.coreKnowledge + '\n');
+
   // Historical background
   if (data.historicalBackground.length > 0) {
-    sections.push(`## 歴史的背景：なぜこのルールが生まれたのか\n`);
+    sections.push(`## 知っておきたい歴史的背景\n`);
     for (const bg of data.historicalBackground) {
       sections.push(`### ${bg.topic}\n`);
       sections.push(bg.content + '\n');
@@ -160,7 +171,7 @@ function composeMarkdown(data: {
 
   // Scene guides
   if (data.sceneGuides.length > 0) {
-    sections.push(`## シーン別ガイド\n`);
+    sections.push(`## シーン別の実践方法\n`);
     for (const guide of data.sceneGuides) {
       sections.push(`### ${guide.scene}\n`);
       sections.push(guide.guidance + '\n');
@@ -169,14 +180,16 @@ function composeMarkdown(data: {
 
   // Q&A
   if (data.qaSection.length > 0) {
-    sections.push(`## よくある質問\n`);
+    sections.push(`## よくある疑問と回答\n`);
     for (const qa of data.qaSection) {
       sections.push(`### Q: ${qa.question}\n`);
       sections.push(`**A:** ${qa.answer}\n`);
     }
   }
 
-  // Conclusion
+  // ========================================
+  // Part 3: 末尾 — まとめ・読者へのアクション提案
+  // ========================================
   sections.push(`## まとめ\n`);
   const conclusionKeywords =
     data.seoKeywords.length > 0

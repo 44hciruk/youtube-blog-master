@@ -68,6 +68,7 @@ export const articles = pgTable(
     decorationStrength: jsonb('decorationStrength'),
     articleLength: varchar('articleLength', { length: 50 }),
     seoKeywords: jsonb('seoKeywords'),
+    metaDescription: text('metaDescription'),
     images: jsonb('images'),
     generatedAt: timestamp('generatedAt').defaultNow(),
     updatedAt: timestamp('updatedAt').defaultNow(),

@@ -20,10 +20,13 @@ const PORT = Number(process.env.PORT) || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Health check endpoint
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // Create tRPC context from request
 const createContext = ({ req }: trpcExpress.CreateExpressContextOptions): Context => {
-  // For development: use x-user-id header
-  // In production: replace with proper auth (e.g., session/JWT)
   const userId = Number(req.headers['x-user-id']) || 0;
   return { req, userId };
 };
@@ -38,7 +41,6 @@ app.post('/api/auth/login', async (req, res) => {
 
   try {
     const trimmedName = name.trim();
-    // Find or create user by name
     const existing = await db
       .select()
       .from(schema.users)
@@ -84,6 +86,24 @@ if (process.env.NODE_ENV === 'production') {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://localhost:${PORT}`);
+
+  // Self-ping to prevent sleep on Render (production only)
+  if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+    const selfUrl = `${process.env.RENDER_EXTERNAL_URL}/health`;
+    const INTERVAL = 15 * 60 * 1000; // 15 minutes
+
+    setInterval(async () => {
+      try {
+        const res = await fetch(selfUrl);
+        const data = await res.json();
+        console.log(`[self-ping] ${new Date().toISOString()} - ${data.status}`);
+      } catch (err) {
+        console.error('[self-ping] failed:', err);
+      }
+    }, INTERVAL);
+
+    console.log(`[self-ping] enabled: pinging ${selfUrl} every 15 minutes`);
+  }
 });
 
 export default app;

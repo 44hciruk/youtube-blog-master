@@ -5,6 +5,7 @@ type DecorationStrength = 'weak' | 'medium' | 'strong';
 interface TransformResult {
   coreKnowledge: string;
   keyInsights: string[];
+  metaDescription: string;
 }
 
 interface HistoricalBackground {
@@ -53,6 +54,26 @@ function getSceneCount(strength: DecorationStrength): number {
   }
 }
 
+const ANTI_HALLUCINATION_RULE = `
+【絶対厳守ルール】
+- トランスクリプトに存在しない情報・数字・固有名詞は一切追加しないこと
+- 不明な点は憶測で補完せず省略すること
+- 「動画」「YouTube」「チャンネル」「この動画では」「紹介されていた」等の言及を完全に排除すること
+- すべて筆者自身の実体験・知見として自然に語る文体にすること
+`;
+
+const SEO_STRUCTURE_RULE = `
+【SEO品質ルール】
+- タイトルは読者が検索しそうな言葉を含める
+- 冒頭200字で「この記事で何がわかるか」を明確にする
+- H2見出しは「〜とは」「〜の方法」「〜のポイント」など検索意図に沿った形にする
+
+【記事構成（必ずこの3部構成を守ること）】
+1. 冒頭：結論・この記事でわかること
+2. 中盤：詳細解説（H2で2〜4セクション）
+3. 末尾：まとめ・読者へのアクション提案
+`;
+
 /**
  * Transform transcript into user's own voice, removing all video references
  */
@@ -73,15 +94,17 @@ export async function transformToUserVoice(
     messages: [
       {
         role: 'system',
-        content: `あなたは、YouTube動画の内容を、ユーザー自身の知見として語り直すエキスパートです。
+        content: `あなたは、トランスクリプトの内容を、筆者自身の知見として語り直すエキスパートです。
 
 以下の処理を行ってください：
 1. 「〇〇氏が言っている」「動画で紹介されていた」「チャンネルでは」などの参照表現をすべて削除
 2. 知識そのものだけを抽出
-3. ユーザーが直接読者に語りかけるスタイルに変換（一人称で、断定的に）
+3. 筆者が直接読者に語りかけるスタイルに変換（一人称で、断定的に）
 4. ${toneInstruction}
+5. 100文字程度のメタディスクリプション（検索結果に表示される要約文）を生成
 
-重要：動画の存在を一切示唆してはいけません。すべてユーザー自身の知見として語ってください。`,
+${ANTI_HALLUCINATION_RULE}
+${SEO_STRUCTURE_RULE}`,
       },
       {
         role: 'user',
@@ -100,15 +123,19 @@ ${transcript}`,
           properties: {
             coreKnowledge: {
               type: 'string',
-              description: 'ユーザーの知見として再構成されたテキスト',
+              description: '筆者の知見として再構成されたテキスト',
             },
             keyInsights: {
               type: 'array',
               items: { type: 'string' },
               description: '抽出された主要なインサイト（5-10個）',
             },
+            metaDescription: {
+              type: 'string',
+              description: '100文字程度のメタディスクリプション。検索結果に表示される要約文。',
+            },
           },
-          required: ['coreKnowledge', 'keyInsights'],
+          required: ['coreKnowledge', 'keyInsights', 'metaDescription'],
           additionalProperties: false,
         },
       },
@@ -136,17 +163,20 @@ export async function generateHistoricalBackground(
     messages: [
       {
         role: 'system',
-        content: `あなたは、紳士服・ファッションに関する歴史エキスパートです。
+        content: `あなたは歴史的背景の解説エキスパートです。
 
 以下のキーインサイトに対して、関連する歴史的背景を生成してください：
 - 起源や由来
 - 歴史的人物の逸話
-- ファッション業界の変遷
+- 業界の変遷
 - 各ディテールの歴史的意味
 
 ${getStrengthInstruction(strength)}
 
-自然な読み物として、読者が「なるほど」と思える歴史的背景を提供してください。`,
+自然な読み物として、読者が「なるほど」と思える歴史的背景を提供してください。
+H2見出しは「〜の歴史とは」「〜が生まれた背景」など検索意図に沿った形にしてください。
+
+${ANTI_HALLUCINATION_RULE}`,
       },
       {
         role: 'user',
@@ -203,13 +233,16 @@ export async function generateSceneGuides(
     messages: [
       {
         role: 'system',
-        content: `あなたは、スーツ・ファッションの着こなしコンサルタントです。
+        content: `あなたは実践的なアドバイザーです。
 
 以下の知識を、${sceneCount}つの異なるシーンに適用したガイドを生成してください。
-シーン例：商談・重要な会議、結婚式・パーティー、カジュアル金曜日、日常ビジネス、特別なイベント、デート
+シーン例：商談・重要な会議、フォーマルな場、カジュアルな場、日常、特別なイベント、デート
 
 各シーンで具体的なアドバイスを、読者がすぐに実践できるように書いてください。
-${getStrengthInstruction(strength)}`,
+H2見出しは「〜の方法」「〜のポイント」など検索意図に沿った形にしてください。
+${getStrengthInstruction(strength)}
+
+${ANTI_HALLUCINATION_RULE}`,
       },
       {
         role: 'user',
@@ -266,7 +299,7 @@ export async function generateQA(
     messages: [
       {
         role: 'system',
-        content: `あなたは、スーツ・ファッションに関するQ&Aエキスパートです。
+        content: `あなたはQ&Aエキスパートです。
 
 以下の知識に基づいて、読者が抱きそうな疑問と回答を${qaCount}個生成してください：
 - 実用的な疑問
@@ -274,7 +307,10 @@ export async function generateQA(
 - 応用的な質問
 
 回答は具体的で実践的な内容にしてください。
-${getStrengthInstruction(strength)}`,
+質問は「〜とは？」「〜の方法は？」など検索されやすい形にしてください。
+${getStrengthInstruction(strength)}
+
+${ANTI_HALLUCINATION_RULE}`,
       },
       {
         role: 'user',

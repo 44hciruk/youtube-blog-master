@@ -14,6 +14,7 @@ interface CreateArticleData {
   decorationStrength?: Record<string, string>;
   articleLength?: string;
   seoKeywords?: string[];
+  metaDescription?: string;
 }
 
 interface UpdateArticleData {
@@ -39,6 +40,7 @@ export async function createArticle(data: CreateArticleData) {
     decorationStrength: data.decorationStrength,
     articleLength: data.articleLength,
     seoKeywords: data.seoKeywords,
+    metaDescription: data.metaDescription,
   }).returning({ id: schema.articles.id });
 
   return { articleId: result.id };

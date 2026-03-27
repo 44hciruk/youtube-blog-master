@@ -11,12 +11,49 @@ import { insertImageInstructions } from '../services/imageInstructionService';
 import { generateImagesForArticle } from '../services/imageGenerationService';
 import { exportToMarkdown, exportToWordPress } from '../services/exportService';
 import { generateArticleSchema, updateArticleSchema } from '../utils/validation';
+import { getProgressKey, setProgress, getProgress, clearProgress } from '../services/progressStore';
+
+/**
+ * Translate common errors into Japanese user-friendly messages
+ */
+function translateError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+
+  // API key issues
+  if (msg.includes('Incorrect API key') || msg.includes('invalid_api_key') || msg.includes('401')) {
+    return 'APIキーが無効です。API設定画面で正しいキーを入力してください。';
+  }
+
+  // Quota exceeded
+  if (msg.includes('quota') || msg.includes('rate_limit') || msg.includes('429') || msg.includes('insufficient_quota')) {
+    return 'OpenAIのAPIクォータを超過しました。プランの確認またはしばらく待ってから再試行してください。';
+  }
+
+  // Video not found / private
+  if (msg.includes('video not found') || msg.includes('private') || msg.includes('404') || msg.includes('videoNotFound')) {
+    return '動画が見つかりません。非公開または削除された動画の可能性があります。';
+  }
+
+  // Transcript not available
+  if (msg.includes('TRANSCRIPT_NOT_AVAILABLE') || msg.includes('subtitles') || msg.includes('caption')) {
+    return 'この動画の字幕を取得できませんでした。字幕が無効になっている可能性があります。';
+  }
+
+  // Network errors
+  if (msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('ENOTFOUND') || msg.includes('fetch failed') || msg.includes('network')) {
+    return 'ネットワークエラーが発生しました。インターネット接続を確認してから再試行してください。';
+  }
+
+  return msg;
+}
 
 export const articleRouter = router({
   // Generate article from YouTube video
   generate: protectedProcedure
     .input(generateArticleSchema)
     .mutation(async ({ ctx, input }) => {
+      const progressKey = getProgressKey(ctx.userId);
+
       // Check API keys
       const [openaiApiKey, youtubeApiKey] = await Promise.all([
         getDecryptedApiKey(ctx.userId, 'openai'),
@@ -26,27 +63,32 @@ export const articleRouter = router({
       if (!openaiApiKey) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
-          message: 'OpenAI APIキーが設定されていません。',
+          message: 'OpenAI APIキーが設定されていません。API設定画面から設定してください。',
         });
       }
       if (!youtubeApiKey) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
-          message: 'YouTube APIキーが設定されていません。',
+          message: 'YouTube APIキーが設定されていません。API設定画面から設定してください。',
         });
       }
 
       const videoId = getVideoId(input.videoUrl);
 
       try {
-        // Get video data
+        // Step 1: Fetch video metadata
+        setProgress(progressKey, 'fetching_video', '動画情報を取得中...');
         const metadata = await getVideoMetadata(videoId, youtubeApiKey);
+
+        // Step 2: Fetch transcript
+        setProgress(progressKey, 'fetching_transcript', '字幕を取得中...');
         const transcriptResult = await getVideoTranscript(videoId, youtubeApiKey);
         const normalizedTranscript = normalizeTranscript(transcriptResult.transcript);
         const extractedKeywords = extractKeywords(normalizedTranscript);
         const mainPoints = extractMainPoints(normalizedTranscript);
 
-        // Generate article
+        // Step 3: Generate article with AI
+        setProgress(progressKey, 'generating_article', 'AIが記事を生成中...');
         const generated = await generateArticle(
           {
             videoId,
@@ -64,7 +106,8 @@ export const articleRouter = router({
           openaiApiKey,
         );
 
-        // Save to database
+        // Step 4: Save to database
+        setProgress(progressKey, 'saving_article', '記事を保存中...');
         const { articleId } = await createArticle({
           userId: ctx.userId,
           title: generated.title,
@@ -78,10 +121,15 @@ export const articleRouter = router({
           decorationStrength: input.decorationStrength,
           articleLength: input.articleLength,
           seoKeywords: input.seoKeywords,
+          metaDescription: generated.metaDescription,
         });
 
         // Save generation history
         await saveGenerationHistory(ctx.userId, input.videoUrl, videoId, 'success');
+
+        setProgress(progressKey, 'completed', '完了');
+        // Clear after a brief delay so frontend can read 'completed'
+        setTimeout(() => clearProgress(progressKey), 5000);
 
         return {
           articleId,
@@ -91,6 +139,9 @@ export const articleRouter = router({
           generatedAt: new Date().toISOString(),
         };
       } catch (error) {
+        setProgress(progressKey, 'error', translateError(error));
+        setTimeout(() => clearProgress(progressKey), 10000);
+
         // Save failed history
         await saveGenerationHistory(
           ctx.userId,
@@ -101,9 +152,19 @@ export const articleRouter = router({
         ).catch(() => {}); // Don't fail if history save fails
 
         if (error instanceof TRPCError) throw error;
-        const message = error instanceof Error ? error.message : '記事生成に失敗しました';
-        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: translateError(error),
+        });
       }
+    }),
+
+  // Get generation progress
+  getProgress: protectedProcedure
+    .query(({ ctx }) => {
+      const progressKey = getProgressKey(ctx.userId);
+      const progress = getProgress(progressKey);
+      return progress || { step: 'idle' as const, message: '' };
     }),
 
   // List articles
@@ -193,8 +254,10 @@ export const articleRouter = router({
         await updateArticle(input.articleId, ctx.userId, { images });
         return { success: true, count: images.length, images };
       } catch (err) {
-        const message = err instanceof Error ? err.message : '画像生成に失敗しました';
-        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: translateError(err),
+        });
       }
     }),
 
