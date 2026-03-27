@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { identifyImagePoints, generateImageKeyword, insertImageInstructions } from './imageInstructionService';
+import { identifyImagePoints, generateImageKeyword, insertImageInstructions } from '../../server/services/imageInstructionService';
 
 const sampleMarkdown = `# スーツの着こなしマナー
 

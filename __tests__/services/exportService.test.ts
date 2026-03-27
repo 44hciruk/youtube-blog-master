@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { exportToMarkdown, exportToWordPress, sanitizeFilename } from './exportService';
+import { exportToMarkdown, exportToWordPress, sanitizeFilename } from '../../server/services/exportService';
 
 describe('exportToMarkdown', () => {
   it('should return markdown content with correct filename', () => {

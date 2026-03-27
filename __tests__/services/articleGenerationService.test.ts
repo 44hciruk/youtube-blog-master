@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composeMarkdown, countJapaneseWords, generateTitle } from './articleGenerationService';
+import { composeMarkdown, countJapaneseWords, generateTitle } from '../../server/services/articleGenerationService';
 
 describe('generateTitle', () => {
   it('should strip bracket markers from title', () => {

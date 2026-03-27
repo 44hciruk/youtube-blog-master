@@ -4,7 +4,7 @@ import {
   isValidYouTubeUrl,
   isValidOpenAiKey,
   isValidYouTubeApiKey,
-} from './validation';
+} from '../../server/utils/validation';
 
 describe('extractVideoId', () => {
   it('should extract ID from standard YouTube URL', () => {

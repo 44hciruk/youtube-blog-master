@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeTranscript, extractKeywords, extractMainPoints } from './textNormalization';
+import { normalizeTranscript, extractKeywords, extractMainPoints } from '../../server/services/textNormalization';
 
 describe('normalizeTranscript', () => {
   it('should remove timestamps', () => {

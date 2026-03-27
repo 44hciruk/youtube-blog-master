@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import crypto from 'crypto';
-import { encryptApiKey, decryptApiKey, maskApiKey } from './encryption';
+import { encryptApiKey, decryptApiKey, maskApiKey } from '../../server/utils/encryption';
 
 // Set a test encryption key
 beforeAll(() => {

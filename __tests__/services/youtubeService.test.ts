@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getVideoId, parseDuration, parseTranscriptXml, decodeXmlEntities } from './youtubeService';
+import { getVideoId, parseDuration, parseTranscriptXml, decodeXmlEntities } from '../../server/services/youtubeService';
 
 describe('getVideoId', () => {
   it('should extract ID from standard URL', () => {
