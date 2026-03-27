@@ -38,6 +38,7 @@ export const videoRouter = router({
         } catch (error) {
           if (error instanceof Error && error.message === 'TRANSCRIPT_NOT_AVAILABLE') {
             // Fallback: try Whisper (requires OpenAI key)
+            console.log('[Video] Transcript not available, trying Whisper fallback...');
             const openaiApiKey = await getDecryptedApiKey(ctx.userId, 'openai');
             if (!openaiApiKey) {
               throw new TRPCError({
@@ -53,8 +54,10 @@ export const videoRouter = router({
               const msg = whisperError instanceof Error ? whisperError.message : '音声認識に失敗しました';
               throw new TRPCError({ code: 'UNPROCESSABLE_CONTENT', message: msg });
             }
+          } else {
+            // Re-throw non-transcript errors
+            throw error;
           }
-          throw error;
         }
 
         // Normalize transcript
