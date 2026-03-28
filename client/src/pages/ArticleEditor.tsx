@@ -9,6 +9,13 @@ import { Tooltip } from '../components/Tooltip';
 interface SavedImage {
   tag: string;
   base64: string;
+  prompt?: string;
+}
+
+interface ImagePromptData {
+  tag: string;
+  description: string;
+  englishPrompt: string;
 }
 
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
@@ -67,6 +74,7 @@ export default function ArticleEditor() {
   const [title, setTitle] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [images, setImages] = useState<SavedImage[]>([]);
+  const [imagePrompts, setImagePrompts] = useState<ImagePromptData[]>([]);
   // Mobile: tab switch; Desktop: side-by-side or expanded
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -97,6 +105,14 @@ export default function ArticleEditor() {
     onError: (err) => showToast(err.message, 'error'),
   });
 
+  const generatePromptsMutation = trpc.article.generateImagePrompts.useMutation({
+    onSuccess: (data) => {
+      setImagePrompts(data.prompts as ImagePromptData[]);
+      showToast('画像プロンプトを生成しました', 'success');
+    },
+    onError: (err) => showToast(err.message, 'error'),
+  });
+
   useEffect(() => {
     if (articleQuery.data) {
       setMarkdown(articleQuery.data.markdownContent);
@@ -111,6 +127,46 @@ export default function ArticleEditor() {
     for (const img of images) map.set(img.tag, img.base64);
     return map;
   }, [images]);
+
+  const promptMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of imagePrompts) map.set(p.tag, p.englishPrompt);
+    // Also include prompts returned with generated images
+    for (const img of images) {
+      if (img.prompt && !map.has(img.tag)) map.set(img.tag, img.prompt);
+    }
+    return map;
+  }, [imagePrompts, images]);
+
+  const handleImageUpload = (tag: string) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setImages((prev) => {
+          const filtered = prev.filter((img) => img.tag !== tag);
+          return [...filtered, { tag, base64: dataUrl }];
+        });
+        showToast('画像をアップロードしました', 'success');
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
+  const handleCopyPrompt = async (prompt: string) => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      showToast('プロンプトをコピーしました', 'success');
+    } catch {
+      showToast('コピーに失敗しました', 'error');
+    }
+  };
 
   const handleSave = useCallback(() => {
     updateMutation.mutate({ articleId, title, markdownContent: markdown, status: 'draft' });
@@ -358,24 +414,68 @@ export default function ArticleEditor() {
                       );
                     }
 
+                    const prompt = promptMap.get(fullTag);
+
                     return (
-                      <div className="my-3 border-2 border-dashed border-gray-200 rounded-lg p-3 bg-gray-50 flex items-center justify-between gap-3 not-prose">
-                        <div className="flex items-center gap-2 min-w-0">
+                      <div className="my-3 border-2 border-dashed border-gray-200 rounded-lg p-3 bg-gray-50 not-prose space-y-2">
+                        <div className="flex items-center gap-2">
                           <span className="text-gray-300 text-lg flex-shrink-0">🖼</span>
                           <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5 truncate">
                             {fullTag}
                           </span>
                         </div>
-                        <button
-                          onClick={handleGenerateImages}
-                          disabled={generateImagesMutation.isPending}
-                          className="flex-shrink-0 px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
-                        >
-                          {generateImagesMutation.isPending
-                            ? <><Spinner className="h-3 w-3" />生成中...</>
-                            : '画像を生成'
-                          }
-                        </button>
+
+                        {/* English prompt display */}
+                        {prompt && (
+                          <div className="bg-white border border-gray-200 rounded p-2">
+                            <p className="text-[10px] text-gray-400 mb-1">English Prompt:</p>
+                            <p className="text-xs text-gray-600 leading-relaxed">{prompt}</p>
+                            <button
+                              onClick={() => handleCopyPrompt(prompt)}
+                              className="mt-1 px-2 py-0.5 text-[10px] text-blue-600 border border-blue-200 rounded hover:bg-blue-50"
+                            >
+                              コピー
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            onClick={handleGenerateImages}
+                            disabled={generateImagesMutation.isPending}
+                            className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {generateImagesMutation.isPending
+                              ? <><Spinner className="h-3 w-3" />生成中...</>
+                              : '画像を生成'
+                            }
+                          </button>
+                          <button
+                            onClick={() => handleImageUpload(fullTag)}
+                            className="px-3 py-1.5 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                          >
+                            画像をアップロード
+                          </button>
+                          {!prompt && (
+                            <button
+                              onClick={() => generatePromptsMutation.mutate({ articleId })}
+                              disabled={generatePromptsMutation.isPending}
+                              className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
+                            >
+                              {generatePromptsMutation.isPending ? 'プロンプト生成中...' : 'プロンプト生成'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Error fallback hint */}
+                        {generateImagesMutation.isError && (
+                          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                            画像生成に失敗しました。プロンプトをコピーして
+                            <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="underline ml-0.5">AI Studio</a>
+                            で生成し、「画像をアップロード」で差し込んでください。
+                          </div>
+                        )}
                       </div>
                     );
                   }

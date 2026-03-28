@@ -8,7 +8,7 @@ import { getVideoId, getVideoMetadata, getVideoTranscript } from '../services/yo
 import { normalizeTranscript, extractKeywords, extractMainPoints } from '../services/textNormalization';
 import { generateArticle } from '../services/articleGenerationService';
 import { insertImageInstructions } from '../services/imageInstructionService';
-import { generateImagesForArticle } from '../services/imageGenerationService';
+import { generateImagesForArticle, generateImagePrompts } from '../services/imageGenerationService';
 import { exportToMarkdown, exportToWordPress } from '../services/exportService';
 import { generateArticleSchema, updateArticleSchema } from '../utils/validation';
 import { getProgressKey, setProgress, getProgress, clearProgress } from '../services/progressStore';
@@ -272,10 +272,49 @@ export const articleRouter = router({
         });
       }
 
+      const openaiApiKey = await getDecryptedApiKey(ctx.userId, 'openai');
+
       try {
-        const images = await generateImagesForArticle(article.markdownContent, googleApiKey);
+        const images = await generateImagesForArticle(
+          article.markdownContent,
+          googleApiKey,
+          openaiApiKey || undefined,
+          article.title,
+        );
         await updateArticle(input.articleId, ctx.userId, { images });
         return { success: true, count: images.length, images };
+      } catch (err) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: translateError(err),
+        });
+      }
+    }),
+
+  // Generate English prompts for image tags
+  generateImagePrompts: protectedProcedure
+    .input(z.object({ articleId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const article = await getArticleById(input.articleId, ctx.userId);
+      if (!article) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '記事が見つかりません' });
+      }
+
+      const openaiApiKey = await getDecryptedApiKey(ctx.userId, 'openai');
+      if (!openaiApiKey) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'OpenAI APIキーが設定されていません。',
+        });
+      }
+
+      try {
+        const prompts = await generateImagePrompts(
+          article.markdownContent,
+          article.title,
+          openaiApiKey,
+        );
+        return { prompts };
       } catch (err) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
