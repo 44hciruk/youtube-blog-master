@@ -4,6 +4,7 @@ import { trpc } from '../lib/trpc';
 import { ArticleTable } from '../components/ArticleTable';
 import { useToast } from '../components/Toast';
 import { Tooltip } from '../components/Tooltip';
+import { CostDashboard } from '../components/CostDashboard';
 
 const STEP_LABELS: Record<string, string> = {
   fetching_video: '動画情報を取得中...',
@@ -223,6 +224,9 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {/* Cost Dashboard */}
+      <CostDashboard />
 
       {/* Articles List */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">

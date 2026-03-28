@@ -93,6 +93,30 @@ export const templates = pgTable('templates', {
   createdAt: timestamp('createdAt').defaultNow(),
 });
 
+// UsageLogs テーブル（コスト追跡）
+export const usageTypeEnum = pgEnum('usage_type', ['llm', 'image']);
+
+export const usageLogs = pgTable(
+  'usageLogs',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('userId')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: usageTypeEnum('type').notNull(),
+    model: varchar('model', { length: 100 }).notNull(),
+    tokensUsed: integer('tokensUsed'),
+    imageCount: integer('imageCount'),
+    costEstimate: varchar('costEstimate', { length: 20 }),
+    articleId: integer('articleId').references(() => articles.id, { onDelete: 'set null' }),
+    createdAt: timestamp('createdAt').defaultNow(),
+  },
+  (table) => [
+    index('usageLogs_userId_idx').on(table.userId),
+    index('usageLogs_createdAt_idx').on(table.createdAt),
+  ],
+);
+
 // GenerationHistory テーブル
 export const generationHistory = pgTable(
   'generationHistory',

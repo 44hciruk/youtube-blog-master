@@ -12,6 +12,7 @@ import { generateImagesForArticle, generateImagePrompts, generateSingleImageForT
 import { exportToMarkdown, exportToWordPress } from '../services/exportService';
 import { generateArticleSchema, updateArticleSchema } from '../utils/validation';
 import { getProgressKey, setProgress, getProgress, clearProgress } from '../services/progressStore';
+import { logUsage } from '../helpers/usageLogs';
 
 /**
  * Translate common errors into Japanese user-friendly messages
@@ -150,6 +151,16 @@ export const articleRouter = router({
         // Save generation history
         await saveGenerationHistory(ctx.userId, input.videoUrl, videoId, 'success');
 
+        // Log usage (4 LLM calls: transformToUserVoice + 3 parallel decorations)
+        await logUsage({
+          userId: ctx.userId,
+          type: 'llm',
+          model: 'gpt-4o',
+          tokensUsed: generated.wordCount ? generated.wordCount * 2 : undefined,
+          costEstimate: '0.05',
+          articleId,
+        });
+
         setProgress(progressKey, 'completed', '完了');
         // Clear after a brief delay so frontend can read 'completed'
         setTimeout(() => clearProgress(progressKey), 5000);
@@ -282,6 +293,19 @@ export const articleRouter = router({
           article.title,
         );
         await updateArticle(input.articleId, ctx.userId, { images });
+
+        // Log image generation usage
+        if (images.length > 0) {
+          await logUsage({
+            userId: ctx.userId,
+            type: 'image',
+            model: 'gemini-3.1-flash-image-preview',
+            imageCount: images.length,
+            costEstimate: (images.length * 0.02).toFixed(3),
+            articleId: input.articleId,
+          });
+        }
+
         return { success: true, count: images.length, images };
       } catch (err) {
         throw new TRPCError({
@@ -325,6 +349,16 @@ export const articleRouter = router({
           image,
         ];
         await updateArticle(input.articleId, ctx.userId, { images: updatedImages });
+
+        // Log single image usage
+        await logUsage({
+          userId: ctx.userId,
+          type: 'image',
+          model: 'gemini-3.1-flash-image-preview',
+          imageCount: 1,
+          costEstimate: '0.02',
+          articleId: input.articleId,
+        });
 
         return { success: true, image };
       } catch (err) {
@@ -388,5 +422,74 @@ export const articleRouter = router({
         filename: `${article.title.substring(0, 50)}.html`,
         mimeType: 'text/html',
       };
+    }),
+
+  // Suggest alternative titles
+  suggestTitles: protectedProcedure
+    .input(z.object({ articleId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const article = await getArticleById(input.articleId, ctx.userId);
+      if (!article) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '記事が見つかりません' });
+      }
+
+      const openaiApiKey = await getDecryptedApiKey(ctx.userId, 'openai');
+      if (!openaiApiKey) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'OpenAI APIキーが設定されていません。',
+        });
+      }
+
+      const { default: OpenAI } = await import('openai');
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+
+      try {
+        const snippet = article.markdownContent.substring(0, 800);
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `現在のタイトルと記事冒頭を元に、SEOに効果的なタイトル候補を3つ提案してください。
+読者がクリックしたくなるような、検索意図に合致したタイトルにしてください。
+JSON配列で返してください。`,
+            },
+            {
+              role: 'user',
+              content: `現在のタイトル: ${article.title}\n\n記事冒頭:\n${snippet}`,
+            },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'title_suggestions',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  titles: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                },
+                required: ['titles'],
+                additionalProperties: false,
+              },
+            },
+          },
+          temperature: 0.8,
+          max_tokens: 300,
+        });
+
+        const content = response.choices[0].message.content;
+        const parsed = content ? JSON.parse(content) : { titles: [] };
+        return { titles: (parsed.titles as string[]).slice(0, 3) };
+      } catch (err) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: translateError(err),
+        });
+      }
     }),
 });

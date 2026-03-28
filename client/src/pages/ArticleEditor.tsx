@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +19,9 @@ interface ImagePromptData {
 }
 
 type ImageStatus = 'idle' | 'generating' | 'completed' | 'failed';
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
 
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -66,6 +69,99 @@ function extractKeywordsWithCount(text: string): { word: string; count: number; 
     }));
 }
 
+/** Convert markdown to clean WordPress HTML */
+function markdownToWordPressHtml(
+  md: string,
+  imageMap: Map<string, string>,
+  metaDescription: string,
+): string {
+  const lines = md.split('\n');
+  const htmlLines: string[] = [];
+  let h2Counter = 0;
+  let h3Counter = 0;
+  let inList = false;
+
+  // Embed meta description as HTML comment
+  if (metaDescription) {
+    htmlLines.push(`<!-- meta description: ${metaDescription} -->`);
+    htmlLines.push('');
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Headings
+    const h1Match = trimmed.match(/^# (.+)$/);
+    if (h1Match) {
+      if (inList) { htmlLines.push('</ul>'); inList = false; }
+      htmlLines.push(`<h1>${h1Match[1]}</h1>`);
+      continue;
+    }
+    const h2Match = trimmed.match(/^## (.+)$/);
+    if (h2Match) {
+      if (inList) { htmlLines.push('</ul>'); inList = false; }
+      h2Counter++;
+      h3Counter = 0;
+      htmlLines.push(`<h2 id="section-${h2Counter}">${h2Match[1]}</h2>`);
+      continue;
+    }
+    const h3Match = trimmed.match(/^### (.+)$/);
+    if (h3Match) {
+      if (inList) { htmlLines.push('</ul>'); inList = false; }
+      h3Counter++;
+      htmlLines.push(`<h3 id="section-${h2Counter}-${h3Counter}">${h3Match[1]}</h3>`);
+      continue;
+    }
+
+    // List items
+    const liMatch = trimmed.match(/^- (.+)$/);
+    if (liMatch) {
+      if (!inList) { htmlLines.push('<ul>'); inList = true; }
+      let content = liMatch[1];
+      content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      htmlLines.push(`<li>${content}</li>`);
+      continue;
+    }
+    if (inList && trimmed === '') {
+      htmlLines.push('</ul>');
+      inList = false;
+    }
+
+    // Image tags
+    const imageMatch = trimmed.match(/^\[画像：(.+?)\]$/);
+    if (imageMatch) {
+      const fullTag = trimmed;
+      const description = imageMatch[1];
+      const dataUrl = imageMap.get(fullTag);
+      if (dataUrl) {
+        htmlLines.push(`<figure>`);
+        htmlLines.push(`<img src="${dataUrl}" alt="${description}" width="100%" />`);
+        htmlLines.push(`<figcaption>${description}</figcaption>`);
+        htmlLines.push(`</figure>`);
+      } else {
+        htmlLines.push(`<!-- 画像挿入: ${description} -->`);
+      }
+      continue;
+    }
+
+    // Empty lines
+    if (trimmed === '') {
+      htmlLines.push('');
+      continue;
+    }
+
+    // Regular paragraphs
+    let content = trimmed;
+    content = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    content = content.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    htmlLines.push(`<p>${content}</p>`);
+  }
+
+  if (inList) htmlLines.push('</ul>');
+  return htmlLines.join('\n');
+}
+
 export default function ArticleEditor() {
   const { id } = useParams<{ id: string }>();
   const articleId = Number(id);
@@ -79,9 +175,14 @@ export default function ArticleEditor() {
   const [imagePrompts, setImagePrompts] = useState<ImagePromptData[]>([]);
   const [imageStatuses, setImageStatuses] = useState<Map<string, ImageStatus>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
+  const [retryInfo, setRetryInfo] = useState<Map<string, { attempt: number; max: number }>>(new Map());
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
   // Mobile: tab switch; Desktop: side-by-side or expanded
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
   const [previewExpanded, setPreviewExpanded] = useState(false);
+
+  // Ref to allow aborting retries
+  const retryAbortRef = useRef<Map<string, boolean>>(new Map());
 
   const articleQuery = trpc.article.get.useQuery(
     { articleId },
@@ -105,7 +206,6 @@ export default function ArticleEditor() {
     onSuccess: (data) => {
       const imgs = data.images as SavedImage[];
       setImages(imgs);
-      // Mark all generated images as completed
       setImageStatuses((prev) => {
         const next = new Map(prev);
         for (const img of imgs) next.set(img.tag, 'completed');
@@ -126,6 +226,11 @@ export default function ArticleEditor() {
 
   const generateSingleImageMutation = trpc.article.generateSingleImage.useMutation();
 
+  const suggestTitlesMutation = trpc.article.suggestTitles.useMutation({
+    onSuccess: () => setShowTitleSuggestions(true),
+    onError: (err) => showToast(err.message, 'error'),
+  });
+
   useEffect(() => {
     if (articleQuery.data) {
       setMarkdown(articleQuery.data.markdownContent);
@@ -144,34 +249,46 @@ export default function ArticleEditor() {
   const promptMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of imagePrompts) map.set(p.tag, p.englishPrompt);
-    // Also include prompts returned with generated images
     for (const img of images) {
       if (img.prompt && !map.has(img.tag)) map.set(img.tag, img.prompt);
     }
     return map;
   }, [imagePrompts, images]);
 
+  /** Generate single image with auto-retry (up to MAX_RETRIES) */
   const handleGenerateSingleImage = async (tag: string) => {
+    retryAbortRef.current.set(tag, false);
     setImageStatuses((prev) => new Map(prev).set(tag, 'generating'));
-    setImageErrors((prev) => {
-      const next = new Map(prev);
-      next.delete(tag);
-      return next;
-    });
+    setImageErrors((prev) => { const n = new Map(prev); n.delete(tag); return n; });
+    setRetryInfo((prev) => new Map(prev).set(tag, { attempt: 1, max: MAX_RETRIES }));
 
-    try {
-      const result = await generateSingleImageMutation.mutateAsync({ articleId, tag });
-      setImages((prev) => {
-        const filtered = prev.filter((img) => img.tag !== tag);
-        return [...filtered, result.image as SavedImage];
-      });
-      setImageStatuses((prev) => new Map(prev).set(tag, 'completed'));
-      showToast('画像を生成しました', 'success');
-    } catch (err) {
-      setImageStatuses((prev) => new Map(prev).set(tag, 'failed'));
-      const msg = err instanceof Error ? err.message : '画像生成に失敗しました';
-      setImageErrors((prev) => new Map(prev).set(tag, msg));
-      showToast(msg, 'error');
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      if (retryAbortRef.current.get(tag)) break;
+
+      setRetryInfo((prev) => new Map(prev).set(tag, { attempt, max: MAX_RETRIES }));
+
+      try {
+        const result = await generateSingleImageMutation.mutateAsync({ articleId, tag });
+        setImages((prev) => {
+          const filtered = prev.filter((img) => img.tag !== tag);
+          return [...filtered, result.image as SavedImage];
+        });
+        setImageStatuses((prev) => new Map(prev).set(tag, 'completed'));
+        setRetryInfo((prev) => { const n = new Map(prev); n.delete(tag); return n; });
+        showToast('画像を生成しました', 'success');
+        return; // Success - exit
+      } catch (err) {
+        if (attempt < MAX_RETRIES) {
+          // Wait before retry
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        } else {
+          // Final failure
+          setImageStatuses((prev) => new Map(prev).set(tag, 'failed'));
+          const msg = err instanceof Error ? err.message : '画像生成に失敗しました';
+          setImageErrors((prev) => new Map(prev).set(tag, `生成失敗（${MAX_RETRIES}/${MAX_RETRIES}回試行済み）`));
+          showToast(msg, 'error');
+        }
+      }
     }
   };
 
@@ -190,19 +307,7 @@ export default function ArticleEditor() {
 
   const handleCopyWordPress = async () => {
     try {
-      let html = markdown;
-      html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-      html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-      html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-      html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-      html = html.replace(/\[画像：(.+?)\]/g, (match) => {
-        const dataUrl = imageMap.get(match);
-        return dataUrl
-          ? `<img src="${dataUrl}" alt="${match.slice(4, -1)}" />`
-          : `<!-- 画像挿入: ${match.slice(4, -1)} -->`;
-      });
+      const html = markdownToWordPressHtml(markdown, imageMap, metaDescription);
       await navigator.clipboard.writeText(html);
       showToast('WordPressへコピーしました', 'success');
     } catch {
@@ -265,7 +370,7 @@ export default function ArticleEditor() {
             </div>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={markdownComponents(imageMap, promptMap, imageStatuses, imageErrors, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
+              components={buildMarkdownComponents(imageMap, promptMap, imageStatuses, imageErrors, retryInfo, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
             >
               {markdown}
             </ReactMarkdown>
@@ -286,6 +391,40 @@ export default function ArticleEditor() {
               onChange={(e) => setTitle(e.target.value)}
               className="text-base sm:text-xl font-bold text-gray-900 border-none outline-none bg-transparent min-w-0 flex-1"
             />
+            {/* Title suggestions */}
+            <div className="relative flex-shrink-0">
+              <button
+                onClick={() => {
+                  if (showTitleSuggestions) {
+                    setShowTitleSuggestions(false);
+                  } else {
+                    suggestTitlesMutation.mutate({ articleId });
+                  }
+                }}
+                disabled={suggestTitlesMutation.isPending}
+                className="px-2 py-1 text-[10px] sm:text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+              >
+                {suggestTitlesMutation.isPending ? <Spinner className="h-3 w-3" /> : null}
+                他の候補
+              </button>
+              {showTitleSuggestions && suggestTitlesMutation.data?.titles && (
+                <div className="absolute right-0 top-full mt-1 z-20 w-72 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg p-2 space-y-1">
+                  {suggestTitlesMutation.data.titles.map((t, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setTitle(t);
+                        setShowTitleSuggestions(false);
+                        showToast('タイトルを変更しました', 'success');
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           {/* Desktop buttons */}
           <div className="hidden lg:flex gap-2 flex-shrink-0">
@@ -316,7 +455,7 @@ export default function ArticleEditor() {
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1"
               >
                 WPコピー
-                <Tooltip text="WordPressの投稿画面でHTMLモードにして貼り付けてください。" />
+                <Tooltip text="WordPressの投稿画面でHTMLモードにして貼り付けてください。メタディスクリプションもコメントとして含まれます。" />
               </button>
             </div>
             <button
@@ -430,7 +569,7 @@ export default function ArticleEditor() {
             </div>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={markdownComponents(imageMap, promptMap, imageStatuses, imageErrors, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
+              components={buildMarkdownComponents(imageMap, promptMap, imageStatuses, imageErrors, retryInfo, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
             >
               {markdown}
             </ReactMarkdown>
@@ -467,13 +606,14 @@ export default function ArticleEditor() {
 }
 
 /**
- * Build ReactMarkdown components with per-image generation support
+ * Build ReactMarkdown components with per-image generation + retry info
  */
-function markdownComponents(
+function buildMarkdownComponents(
   imageMap: Map<string, string>,
   promptMap: Map<string, string>,
   imageStatuses: Map<string, ImageStatus>,
   imageErrors: Map<string, string>,
+  retryInfo: Map<string, { attempt: number; max: number }>,
   onGenerateImage: (tag: string) => void,
   onCopyPrompt: (prompt: string) => void,
   generatePromptsMutation: { mutate: (input: { articleId: number }) => void; isPending: boolean },
@@ -498,20 +638,24 @@ function markdownComponents(
         const dataUrl = imageMap.get(fullTag);
         const status = imageStatuses.get(fullTag) || 'idle';
         const error = imageErrors.get(fullTag);
+        const retry = retryInfo.get(fullTag);
 
         if (dataUrl) {
           return (
             <figure className="my-4 not-prose">
               <img src={dataUrl} alt={description} className="w-full rounded-lg object-cover max-h-[500px]" />
               <figcaption className="text-center text-xs text-gray-400 mt-1">{description}</figcaption>
-              {/* Allow regeneration */}
+              {/* Regeneration button */}
               <div className="flex justify-center mt-2">
                 <button
                   onClick={() => onGenerateImage(fullTag)}
                   disabled={status === 'generating'}
                   className="px-3 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
-                  {status === 'generating' ? <><Spinner className="h-3 w-3" />再生成中...</> : '再生成'}
+                  {status === 'generating'
+                    ? <><Spinner className="h-3 w-3" />{retry ? `リトライ中 ${retry.attempt}/${retry.max}` : '再生成中...'}</>
+                    : '再生成'
+                  }
                 </button>
               </div>
             </figure>
@@ -546,7 +690,7 @@ function markdownComponents(
                 className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isGenerating
-                  ? <><Spinner className="h-3 w-3" />生成中...</>
+                  ? <><Spinner className="h-3 w-3" />{retry ? `リトライ中 ${retry.attempt}/${retry.max}` : '生成中...'}</>
                   : 'この画像を生成'
                 }
               </button>
@@ -569,10 +713,10 @@ function markdownComponents(
               )}
             </div>
 
-            {/* Per-image error */}
+            {/* Per-image error with retry exhausted */}
             {(status === 'failed' || error) && (
               <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                画像生成に失敗しました。プロンプトをコピーして
+                {error || '画像生成に失敗しました。'}プロンプトをコピーして
                 <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="underline ml-0.5">AI Studio</a>
                 で生成してください。
               </div>
