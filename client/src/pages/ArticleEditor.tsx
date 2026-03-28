@@ -103,7 +103,14 @@ export default function ArticleEditor() {
 
   const generateImagesMutation = trpc.article.generateImages.useMutation({
     onSuccess: (data) => {
-      setImages(data.images as SavedImage[]);
+      const imgs = data.images as SavedImage[];
+      setImages(imgs);
+      // Mark all generated images as completed
+      setImageStatuses((prev) => {
+        const next = new Map(prev);
+        for (const img of imgs) next.set(img.tag, 'completed');
+        return next;
+      });
       showToast(`${data.count}枚の画像を生成しました`, 'success');
     },
     onError: (err) => showToast(err.message, 'error'),

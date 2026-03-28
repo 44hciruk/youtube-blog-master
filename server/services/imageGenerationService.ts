@@ -172,7 +172,7 @@ export async function generateSingleImage(
 
 /**
  * Generate images for all [画像：〇〇] tags found in article content.
- * First generates English prompts via OpenAI, then generates images via Nano Banana 2.
+ * Loops over generateSingleImageForTag for each unique tag.
  */
 export async function generateImagesForArticle(
   markdownContent: string,
@@ -190,24 +190,9 @@ export async function generateImagesForArticle(
   const results: GeneratedImage[] = [];
 
   for (const tag of uniqueTags) {
-    const description = extractDescription(tag);
-
-    // Generate English prompt
-    let englishPrompt: string;
-    if (openaiApiKey && articleTitle) {
-      try {
-        englishPrompt = await generateEnglishPrompt(description, articleTitle, openaiApiKey);
-      } catch {
-        englishPrompt = `Professional blog photo: ${description}. Style: clean, bright natural light, modern background.`;
-      }
-    } else {
-      englishPrompt = `Professional blog photo: ${description}. Style: clean, bright natural light, modern background.`;
-    }
-
-    // Generate image
     try {
-      const base64 = await generateSingleImage(englishPrompt, googleApiKey);
-      results.push({ tag, base64, prompt: englishPrompt });
+      const image = await generateSingleImageForTag(tag, googleApiKey, openaiApiKey, articleTitle);
+      results.push(image);
     } catch (err) {
       console.warn(`[imageGenerationService] Skipping tag "${tag}":`, err instanceof Error ? err.message : err);
     }
