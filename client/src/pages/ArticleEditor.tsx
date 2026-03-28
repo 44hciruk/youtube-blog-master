@@ -23,6 +23,9 @@ type ImageStatus = 'idle' | 'generating' | 'completed' | 'failed';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
 
+/** Minimum keyword density (%) to highlight as SEO-effective */
+const SEO_DENSITY_THRESHOLD = 1.0;
+
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
@@ -178,7 +181,6 @@ export default function ArticleEditor() {
   const [retryInfo, setRetryInfo] = useState<Map<string, { attempt: number; max: number }>>(new Map());
   // Mobile: tab switch; Desktop: side-by-side or expanded
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
-  const [previewExpanded, setPreviewExpanded] = useState(false);
 
   // Ref to allow aborting retries
   const retryAbortRef = useRef<Map<string, boolean>>(new Map());
@@ -346,32 +348,6 @@ export default function ArticleEditor() {
     <div className="flex flex-col">
       <ToastContainer />
 
-      {/* Fullscreen preview modal */}
-      {previewExpanded && (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
-          <div className="sticky top-0 z-10 bg-white border-b border-[#E5E7EB] px-4 py-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-[#6B7280]">HTMLプレビュー</span>
-            <button
-              onClick={() => setPreviewExpanded(false)}
-              className="px-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6]"
-            >
-              閉じる
-            </button>
-          </div>
-          <div className="max-w-4xl mx-auto p-6 sm:p-8 prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
-            <div className="not-prose mb-4 px-3 py-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded text-xs text-[#6B7280]">
-              ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
-            </div>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={buildMarkdownComponents(imageMap, promptMap, imageStatuses, imageErrors, retryInfo, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
-            >
-              {markdown}
-            </ReactMarkdown>
-          </div>
-        </div>
-      )}
-
       {/* Header - Row 1: Back + Title + Save */}
       <div className="flex flex-col gap-2 mb-3">
         <div className="flex items-center gap-2 sm:gap-3 pb-2 border-b border-[#E5E7EB]">
@@ -419,14 +395,14 @@ export default function ArticleEditor() {
             <button
               onClick={() => imageInstructionsMutation.mutate({ articleId })}
               disabled={imageInstructionsMutation.isPending}
-              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50 transition-colors"
+              className="px-3 py-1.5 text-[13px] font-medium border border-[#2563EB] rounded-lg text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50 transition-colors"
             >
               画像指示追加
             </button>
             <button
               onClick={handleGenerateImages}
               disabled={generateImagesMutation.isPending}
-              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50 flex items-center gap-1 transition-colors"
+              className="px-3 py-1.5 text-[13px] font-medium border border-[#2563EB] rounded-lg text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50 flex items-center gap-1 transition-colors"
             >
               {generateImagesMutation.isPending ? <><Spinner className="h-3 w-3" />生成中...</> : '全画像を生成'}
             </button>
@@ -441,12 +417,6 @@ export default function ArticleEditor() {
                 <Tooltip text="WordPressの投稿画面でHTMLモードにして貼り付けてください。メタディスクリプションもコメントとして含まれます。" />
               </button>
             </div>
-            <button
-              onClick={() => setPreviewExpanded(true)}
-              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] transition-colors"
-            >
-              プレビュー拡大
-            </button>
           </div>
         </div>
 
@@ -472,7 +442,7 @@ export default function ArticleEditor() {
       {/* Editor and Preview - 3:7 ratio on desktop */}
       <div className="lg:flex lg:gap-4">
         {/* Markdown Editor - 3/10 width on desktop */}
-        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[30%] lg:min-w-[280px]'} ${mobileTab !== 'edit' ? 'hidden lg:flex' : ''}`}>
+        <div className={`flex flex-col lg:w-[30%] lg:min-w-[280px] ${mobileTab !== 'edit' ? 'hidden lg:flex' : ''}`}>
           <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">Markdownエディタ</div>
           <textarea
             value={markdown}
@@ -492,7 +462,7 @@ export default function ArticleEditor() {
         </div>
 
         {/* Preview - 7/10 width on desktop */}
-        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[70%]'} ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
+        <div className={`flex flex-col lg:w-[70%] ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
           <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">HTMLプレビュー</div>
           <div className="p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
             <div className="not-prose mb-4 px-3 py-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded text-xs text-[#6B7280]">
@@ -514,15 +484,24 @@ export default function ArticleEditor() {
                 <Tooltip text="記事内で使用されているキーワードとその出現頻度です。密度2〜3%が理想的です。" />
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {seoKeywords.map((kw) => (
-                  <span
-                    key={kw.word}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-[#E5E7EB] bg-[#F3F4F6] text-[#374151]"
-                  >
-                    {kw.word}
-                    <span className="text-[10px] text-[#6B7280]">{kw.count}回 {kw.density}%</span>
-                  </span>
-                ))}
+                {seoKeywords.map((kw) => {
+                  const isSeoEffective = kw.density >= SEO_DENSITY_THRESHOLD;
+                  return (
+                    <span
+                      key={kw.word}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${
+                        isSeoEffective
+                          ? 'bg-[#DCFCE7] border-[#86EFAC] text-[#166534]'
+                          : 'bg-[#F3F4F6] border-[#E5E7EB] text-[#374151]'
+                      }`}
+                    >
+                      {kw.word}
+                      <span className={`text-[10px] ${isSeoEffective ? 'text-[#166534] opacity-70' : 'text-[#6B7280]'}`}>
+                        {kw.count}回 {kw.density}%
+                      </span>
+                    </span>
+                  );
+                })}
               </div>
             </div>
           )}

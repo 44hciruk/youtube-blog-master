@@ -117,7 +117,7 @@ function ActionButtons({
     <div className="flex items-center gap-1 flex-wrap">
       <button
         onClick={() => onEdit(article.id)}
-        className="px-2 py-1 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded transition-colors"
+        className="px-2 py-1 text-xs font-medium text-[#2563EB] bg-[#EFF6FF] border border-[#2563EB] rounded hover:bg-[#DBEAFE] transition-colors"
       >
         編集
       </button>
