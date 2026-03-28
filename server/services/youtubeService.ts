@@ -33,17 +33,31 @@ export function getVideoId(url: string): string {
  * Normalize various YouTube URL formats to standard watch URL
  */
 function normalizeYouTubeUrl(url: string): string {
-  // Handle youtu.be short URLs
+  // Strip tracking params (?si=, &si=, etc.) before processing
+  let cleanUrl = url.split('?')[0];
+  const urlObj = (() => { try { return new URL(url); } catch { return null; } })();
+  const vParam = urlObj?.searchParams.get('v');
+
+  // Handle youtu.be short URLs (e.g. https://youtu.be/XXXXX?si=abc)
   const shortMatch = url.match(/^https?:\/\/youtu\.be\/([a-zA-Z0-9_-]{11})/);
   if (shortMatch) {
     return `https://www.youtube.com/watch?v=${shortMatch[1]}`;
   }
-  // Handle shorts URLs
+  // Handle shorts URLs (e.g. https://www.youtube.com/shorts/XXXXX?si=abc)
   const shortsMatch = url.match(/^https?:\/\/(www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/);
   if (shortsMatch) {
     return `https://www.youtube.com/watch?v=${shortsMatch[2]}`;
   }
-  return url;
+  // Handle embed URLs (e.g. https://www.youtube.com/embed/XXXXX)
+  const embedMatch = url.match(/^https?:\/\/(www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/);
+  if (embedMatch) {
+    return `https://www.youtube.com/watch?v=${embedMatch[2]}`;
+  }
+  // Handle standard watch URLs - strip extra params, keep only v=
+  if (vParam) {
+    return `https://www.youtube.com/watch?v=${vParam}`;
+  }
+  return cleanUrl;
 }
 
 /**
@@ -110,10 +124,10 @@ export async function getVideoTranscript(
 ): Promise<{ transcript: string; segments: TranscriptSegment[]; language: string }> {
   console.log(`[YouTube] Attempting to fetch transcript for video: ${videoId}`);
 
-  // Strategy 1: Android innertube API (most reliable, no scraping needed)
+  // Strategy 1: youtube-transcript package with multi-language fallback
   try {
-    console.log('[YouTube] Strategy 1: Android innertube API');
-    const result = await fetchAndroidInnertubeTranscript(videoId);
+    console.log('[YouTube] Strategy 1: youtube-transcript package');
+    const result = await fetchWithYoutubeTranscriptPackage(videoId);
     if (result && result.transcript.length > 50) {
       console.log(`[YouTube] Strategy 1 succeeded: ${result.transcript.length} chars, lang=${result.language}`);
       return result;
@@ -121,6 +135,19 @@ export async function getVideoTranscript(
     console.log('[YouTube] Strategy 1: transcript too short or empty');
   } catch (error) {
     console.log(`[YouTube] Strategy 1 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  // Strategy 1.5: Android innertube API (direct implementation fallback)
+  try {
+    console.log('[YouTube] Strategy 1.5: Android innertube API');
+    const result = await fetchAndroidInnertubeTranscript(videoId);
+    if (result && result.transcript.length > 50) {
+      console.log(`[YouTube] Strategy 1.5 succeeded: ${result.transcript.length} chars, lang=${result.language}`);
+      return result;
+    }
+    console.log('[YouTube] Strategy 1.5: transcript too short or empty');
+  } catch (error) {
+    console.log(`[YouTube] Strategy 1.5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   // Strategy 2: Unofficial innertube API (scrape watch page)
@@ -189,9 +216,65 @@ export async function getVideoTranscript(
 }
 
 /**
- * Strategy 1: Use YouTube Android innertube API directly
+ * Strategy 1: Use youtube-transcript package with multi-language fallback
+ * Uses dynamic import() to avoid ESM/CJS compatibility issues with tsup bundling.
+ */
+async function fetchWithYoutubeTranscriptPackage(
+  videoId: string,
+): Promise<{ transcript: string; segments: TranscriptSegment[]; language: string } | null> {
+  // Dynamic import to avoid ESM/CJS bundling issues
+  const { YoutubeTranscript } = await import('youtube-transcript');
+
+  // Try multiple languages in priority order
+  const langs = ['ja', 'en', 'ko', 'zh'];
+
+  for (const lang of langs) {
+    try {
+      console.log(`[YouTube] youtube-transcript: trying lang=${lang}`);
+      const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, { lang });
+
+      if (transcriptItems && transcriptItems.length > 0) {
+        const segments: TranscriptSegment[] = transcriptItems.map(item => ({
+          text: item.text,
+          start: item.offset / 1000,
+          duration: item.duration / 1000,
+        }));
+        const transcript = segments.map(s => s.text).join(' ').trim();
+        console.log(`[YouTube] youtube-transcript: success (${lang}): ${transcript.length}文字`);
+        return { transcript, segments, language: lang };
+      }
+    } catch (e) {
+      console.warn(`[YouTube] youtube-transcript: ${lang} failed:`, e instanceof Error ? e.message : e);
+      continue;
+    }
+  }
+
+  // Try without language specification (auto-detect)
+  try {
+    console.log('[YouTube] youtube-transcript: trying without lang specification');
+    const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
+
+    if (transcriptItems && transcriptItems.length > 0) {
+      const segments: TranscriptSegment[] = transcriptItems.map(item => ({
+        text: item.text,
+        start: item.offset / 1000,
+        duration: item.duration / 1000,
+      }));
+      const transcript = segments.map(s => s.text).join(' ').trim();
+      console.log(`[YouTube] youtube-transcript: success (auto): ${transcript.length}文字`);
+      return { transcript, segments, language: 'auto' };
+    }
+  } catch (e) {
+    console.warn('[YouTube] youtube-transcript: auto failed:', e instanceof Error ? e.message : e);
+  }
+
+  return null;
+}
+
+/**
+ * Strategy 1.5: Use YouTube Android innertube API directly
  * This is the same approach used by youtube-transcript package internally,
- * but implemented directly to avoid ESM/CJS compatibility issues.
+ * but implemented directly as a fallback.
  */
 async function fetchAndroidInnertubeTranscript(
   videoId: string,
