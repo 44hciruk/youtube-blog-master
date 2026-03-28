@@ -53,21 +53,10 @@ export const userRouter = router({
 
         if (input.keyType === 'google') {
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: 'test' }] }],
-              }),
-            },
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
           );
           if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            const errorMsg = (errorData as Record<string, unknown>)?.error
-              ? JSON.stringify((errorData as Record<string, unknown>).error)
-              : `status ${res.status}`;
-            throw new Error(`Google API Key が無効です: ${errorMsg}`);
+            throw new Error(`Google API Key が無効です (status ${res.status})`);
           }
           return { success: true, message: 'Google API（Gemini）接続成功' };
         }
