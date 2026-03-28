@@ -1,5 +1,3 @@
-import { GoogleGenAI, Modality } from '@google/genai';
-
 export interface GeneratedImage {
   tag: string;
   base64: string;
@@ -27,42 +25,44 @@ function extractDescription(tag: string): string {
 }
 
 /**
- * Generate a single image via Gemini API and return as Base64
+ * Generate a single image via Imagen 3.0 API and return as Base64 data URI
  */
 async function generateSingleImage(
   description: string,
   apiKey: string,
 ): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `高品質なブログ用写真を生成してください。テーマ：${description}。スタイル：プロフェッショナル、明るい自然光、清潔感のある背景。用途：日本のメンズファッション・スーツブログ記事のアイキャッチ画像。`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash-exp',
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: `高品質なブログ用写真を生成してください。テーマ：${description}。
-スタイル：プロフェッショナル、明るい自然光、清潔感のある背景。
-用途：日本のメンズファッション・スーツブログ記事のアイキャッチ画像。`,
-          },
-        ],
-      },
-    ],
-    config: {
-      responseModalities: [Modality.IMAGE, Modality.TEXT],
-    },
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      instances: [{ prompt }],
+      parameters: { sampleCount: 1 },
+    }),
   });
 
-  const parts = response.candidates?.[0]?.content?.parts ?? [];
-  for (const part of parts) {
-    if (part.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) {
-      // Return as data URI so the frontend can use it directly as <img src>
-      return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-    }
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    const errorMsg = (errorData as Record<string, unknown>)?.error
+      ? JSON.stringify((errorData as Record<string, unknown>).error)
+      : `status ${res.status}`;
+    throw new Error(`Imagen API error: ${errorMsg}`);
   }
 
-  throw new Error(`画像生成に失敗しました: ${description}`);
+  const data = await res.json() as {
+    predictions?: Array<{ bytesBase64Encoded?: string; mimeType?: string }>;
+  };
+
+  const prediction = data.predictions?.[0];
+  if (!prediction?.bytesBase64Encoded) {
+    throw new Error(`画像生成に失敗しました: ${description}`);
+  }
+
+  const mimeType = prediction.mimeType || 'image/png';
+  return `data:${mimeType};base64,${prediction.bytesBase64Encoded}`;
 }
 
 /**
