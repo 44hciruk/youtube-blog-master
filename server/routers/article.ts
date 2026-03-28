@@ -8,7 +8,7 @@ import { getVideoId, getVideoMetadata, getVideoTranscript } from '../services/yo
 import { normalizeTranscript, extractKeywords, extractMainPoints } from '../services/textNormalization';
 import { generateArticle } from '../services/articleGenerationService';
 import { insertImageInstructions } from '../services/imageInstructionService';
-import { generateImagesForArticle, generateImagePrompts } from '../services/imageGenerationService';
+import { generateImagesForArticle, generateImagePrompts, generateSingleImageForTag } from '../services/imageGenerationService';
 import { exportToMarkdown, exportToWordPress } from '../services/exportService';
 import { generateArticleSchema, updateArticleSchema } from '../utils/validation';
 import { getProgressKey, setProgress, getProgress, clearProgress } from '../services/progressStore';
@@ -283,6 +283,50 @@ export const articleRouter = router({
         );
         await updateArticle(input.articleId, ctx.userId, { images });
         return { success: true, count: images.length, images };
+      } catch (err) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: translateError(err),
+        });
+      }
+    }),
+
+  // Generate a single image for a specific tag
+  generateSingleImage: protectedProcedure
+    .input(z.object({ articleId: z.number(), tag: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const article = await getArticleById(input.articleId, ctx.userId);
+      if (!article) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '記事が見つかりません' });
+      }
+
+      const googleApiKey = await getDecryptedApiKey(ctx.userId, 'google');
+      if (!googleApiKey) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: 'Google APIキーが設定されていません。API設定画面から設定してください。',
+        });
+      }
+
+      const openaiApiKey = await getDecryptedApiKey(ctx.userId, 'openai');
+
+      try {
+        const image = await generateSingleImageForTag(
+          input.tag,
+          googleApiKey,
+          openaiApiKey || undefined,
+          article.title,
+        );
+
+        // Merge with existing images
+        const existingImages = (article.images as Array<{ tag: string; base64: string; prompt?: string }>) || [];
+        const updatedImages = [
+          ...existingImages.filter((img) => img.tag !== input.tag),
+          image,
+        ];
+        await updateArticle(input.articleId, ctx.userId, { images: updatedImages });
+
+        return { success: true, image };
       } catch (err) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

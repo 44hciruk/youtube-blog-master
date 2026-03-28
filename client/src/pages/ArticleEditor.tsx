@@ -18,6 +18,8 @@ interface ImagePromptData {
   englishPrompt: string;
 }
 
+type ImageStatus = 'idle' | 'generating' | 'completed' | 'failed';
+
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
@@ -75,6 +77,8 @@ export default function ArticleEditor() {
   const [metaDescription, setMetaDescription] = useState('');
   const [images, setImages] = useState<SavedImage[]>([]);
   const [imagePrompts, setImagePrompts] = useState<ImagePromptData[]>([]);
+  const [imageStatuses, setImageStatuses] = useState<Map<string, ImageStatus>>(new Map());
+  const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   // Mobile: tab switch; Desktop: side-by-side or expanded
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -113,6 +117,8 @@ export default function ArticleEditor() {
     onError: (err) => showToast(err.message, 'error'),
   });
 
+  const generateSingleImageMutation = trpc.article.generateSingleImage.useMutation();
+
   useEffect(() => {
     if (articleQuery.data) {
       setMarkdown(articleQuery.data.markdownContent);
@@ -138,25 +144,28 @@ export default function ArticleEditor() {
     return map;
   }, [imagePrompts, images]);
 
-  const handleImageUpload = (tag: string) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        setImages((prev) => {
-          const filtered = prev.filter((img) => img.tag !== tag);
-          return [...filtered, { tag, base64: dataUrl }];
-        });
-        showToast('画像をアップロードしました', 'success');
-      };
-      reader.readAsDataURL(file);
-    };
-    input.click();
+  const handleGenerateSingleImage = async (tag: string) => {
+    setImageStatuses((prev) => new Map(prev).set(tag, 'generating'));
+    setImageErrors((prev) => {
+      const next = new Map(prev);
+      next.delete(tag);
+      return next;
+    });
+
+    try {
+      const result = await generateSingleImageMutation.mutateAsync({ articleId, tag });
+      setImages((prev) => {
+        const filtered = prev.filter((img) => img.tag !== tag);
+        return [...filtered, result.image as SavedImage];
+      });
+      setImageStatuses((prev) => new Map(prev).set(tag, 'completed'));
+      showToast('画像を生成しました', 'success');
+    } catch (err) {
+      setImageStatuses((prev) => new Map(prev).set(tag, 'failed'));
+      const msg = err instanceof Error ? err.message : '画像生成に失敗しました';
+      setImageErrors((prev) => new Map(prev).set(tag, msg));
+      showToast(msg, 'error');
+    }
   };
 
   const handleCopyPrompt = async (prompt: string) => {
@@ -231,6 +240,32 @@ export default function ArticleEditor() {
     <div className="h-[calc(100vh-8rem)] flex flex-col">
       <ToastContainer />
 
+      {/* Fullscreen preview modal */}
+      {previewExpanded && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">HTMLプレビュー</span>
+            <button
+              onClick={() => setPreviewExpanded(false)}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              閉じる
+            </button>
+          </div>
+          <div className="max-w-4xl mx-auto p-6 sm:p-8 prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
+            <div className="not-prose mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+              ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
+            </div>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={markdownComponents(imageMap, promptMap, imageStatuses, imageErrors, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
+            >
+              {markdown}
+            </ReactMarkdown>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-2 mb-3">
         <div className="flex items-center justify-between">
@@ -278,10 +313,10 @@ export default function ArticleEditor() {
               </button>
             </div>
             <button
-              onClick={() => setPreviewExpanded(!previewExpanded)}
+              onClick={() => setPreviewExpanded(true)}
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
             >
-              {previewExpanded ? '分割' : 'プレビュー拡大'}
+              プレビュー拡大
             </button>
           </div>
           {/* Mobile buttons */}
@@ -351,16 +386,16 @@ export default function ArticleEditor() {
               disabled={generateImagesMutation.isPending}
               className="px-2 py-1 text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50"
             >
-              画像生成
+              全画像生成
             </button>
           </div>
         </div>
       </div>
 
-      {/* Editor and Preview */}
+      {/* Editor and Preview - 3:7 ratio */}
       <div className="flex gap-4 flex-1 min-h-0">
-        {/* Markdown Editor - Desktop: show unless preview expanded; Mobile: show on edit tab */}
-        <div className={`flex-1 flex flex-col ${previewExpanded ? 'hidden' : ''} ${mobileTab !== 'edit' ? 'hidden lg:flex' : ''}`}>
+        {/* Markdown Editor - 3/10 width on desktop */}
+        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[30%] lg:min-w-[280px]'} ${mobileTab !== 'edit' ? 'hidden lg:flex' : 'flex-1 lg:flex-none'}`}>
           <div className="text-xs text-gray-500 mb-1 hidden lg:block">Markdownエディタ</div>
           <textarea
             value={markdown}
@@ -378,110 +413,16 @@ export default function ArticleEditor() {
           </div>
         </div>
 
-        {/* Preview - Desktop: always show; Mobile: show on preview tab */}
-        <div className={`flex flex-col ${previewExpanded ? 'w-full' : 'flex-1'} ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
+        {/* Preview - 7/10 width on desktop, min-height 80vh */}
+        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[70%]'} ${mobileTab !== 'preview' ? 'hidden lg:flex' : 'flex-1 lg:flex-none'}`}>
           <div className="text-xs text-gray-500 mb-1 hidden lg:block">HTMLプレビュー</div>
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 border border-gray-300 rounded-lg bg-white prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 border border-gray-300 rounded-lg bg-white prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5" style={{ minHeight: '80vh' }}>
             <div className="not-prose mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
               ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
             </div>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={{
-                h1: ({ children }) => (
-                  <h1 className="text-2xl font-bold border-b border-gray-200 pb-2 mb-4">{children}</h1>
-                ),
-                h2: ({ children }) => (
-                  <h2 className="text-xl font-bold mt-8 mb-3 text-gray-900">{children}</h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 className="text-lg font-semibold mt-6 mb-2 text-gray-800">{children}</h3>
-                ),
-                p: ({ children }) => {
-                  const text = String(children).trim();
-                  const imageMatch = text.match(/^\[画像：(.+?)\]$/);
-                  if (imageMatch) {
-                    const fullTag = text;
-                    const description = imageMatch[1];
-                    const dataUrl = imageMap.get(fullTag);
-
-                    if (dataUrl) {
-                      return (
-                        <figure className="my-4 not-prose">
-                          <img src={dataUrl} alt={description} className="w-full rounded-lg object-cover max-h-80" />
-                          <figcaption className="text-center text-xs text-gray-400 mt-1">{description}</figcaption>
-                        </figure>
-                      );
-                    }
-
-                    const prompt = promptMap.get(fullTag);
-
-                    return (
-                      <div className="my-3 border-2 border-dashed border-gray-200 rounded-lg p-3 bg-gray-50 not-prose space-y-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-300 text-lg flex-shrink-0">🖼</span>
-                          <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5 truncate">
-                            {fullTag}
-                          </span>
-                        </div>
-
-                        {/* English prompt display */}
-                        {prompt && (
-                          <div className="bg-white border border-gray-200 rounded p-2">
-                            <p className="text-[10px] text-gray-400 mb-1">English Prompt:</p>
-                            <p className="text-xs text-gray-600 leading-relaxed">{prompt}</p>
-                            <button
-                              onClick={() => handleCopyPrompt(prompt)}
-                              className="mt-1 px-2 py-0.5 text-[10px] text-blue-600 border border-blue-200 rounded hover:bg-blue-50"
-                            >
-                              コピー
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Action buttons */}
-                        <div className="flex flex-wrap gap-1.5">
-                          <button
-                            onClick={handleGenerateImages}
-                            disabled={generateImagesMutation.isPending}
-                            className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
-                          >
-                            {generateImagesMutation.isPending
-                              ? <><Spinner className="h-3 w-3" />生成中...</>
-                              : '画像を生成'
-                            }
-                          </button>
-                          <button
-                            onClick={() => handleImageUpload(fullTag)}
-                            className="px-3 py-1.5 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
-                          >
-                            画像をアップロード
-                          </button>
-                          {!prompt && (
-                            <button
-                              onClick={() => generatePromptsMutation.mutate({ articleId })}
-                              disabled={generatePromptsMutation.isPending}
-                              className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
-                            >
-                              {generatePromptsMutation.isPending ? 'プロンプト生成中...' : 'プロンプト生成'}
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Error fallback hint */}
-                        {generateImagesMutation.isError && (
-                          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                            画像生成に失敗しました。プロンプトをコピーして
-                            <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="underline ml-0.5">AI Studio</a>
-                            で生成し、「画像をアップロード」で差し込んでください。
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  return <p>{children}</p>;
-                },
-              }}
+              components={markdownComponents(imageMap, promptMap, imageStatuses, imageErrors, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
             >
               {markdown}
             </ReactMarkdown>
@@ -515,4 +456,123 @@ export default function ArticleEditor() {
       </div>
     </div>
   );
+}
+
+/**
+ * Build ReactMarkdown components with per-image generation support
+ */
+function markdownComponents(
+  imageMap: Map<string, string>,
+  promptMap: Map<string, string>,
+  imageStatuses: Map<string, ImageStatus>,
+  imageErrors: Map<string, string>,
+  onGenerateImage: (tag: string) => void,
+  onCopyPrompt: (prompt: string) => void,
+  generatePromptsMutation: { mutate: (input: { articleId: number }) => void; isPending: boolean },
+  articleId: number,
+) {
+  return {
+    h1: ({ children }: { children?: React.ReactNode }) => (
+      <h1 className="text-2xl font-bold border-b border-gray-200 pb-2 mb-4">{children}</h1>
+    ),
+    h2: ({ children }: { children?: React.ReactNode }) => (
+      <h2 className="text-xl font-bold mt-8 mb-3 text-gray-900">{children}</h2>
+    ),
+    h3: ({ children }: { children?: React.ReactNode }) => (
+      <h3 className="text-lg font-semibold mt-6 mb-2 text-gray-800">{children}</h3>
+    ),
+    p: ({ children }: { children?: React.ReactNode }) => {
+      const text = String(children).trim();
+      const imageMatch = text.match(/^\[画像：(.+?)\]$/);
+      if (imageMatch) {
+        const fullTag = text;
+        const description = imageMatch[1];
+        const dataUrl = imageMap.get(fullTag);
+        const status = imageStatuses.get(fullTag) || 'idle';
+        const error = imageErrors.get(fullTag);
+
+        if (dataUrl) {
+          return (
+            <figure className="my-4 not-prose">
+              <img src={dataUrl} alt={description} className="w-full rounded-lg object-cover max-h-[500px]" />
+              <figcaption className="text-center text-xs text-gray-400 mt-1">{description}</figcaption>
+              {/* Allow regeneration */}
+              <div className="flex justify-center mt-2">
+                <button
+                  onClick={() => onGenerateImage(fullTag)}
+                  disabled={status === 'generating'}
+                  className="px-3 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {status === 'generating' ? <><Spinner className="h-3 w-3" />再生成中...</> : '再生成'}
+                </button>
+              </div>
+            </figure>
+          );
+        }
+
+        const prompt = promptMap.get(fullTag);
+        const isGenerating = status === 'generating';
+
+        return (
+          <div className="my-3 border-2 border-dashed border-gray-200 rounded-lg p-3 bg-gray-50 not-prose space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-300 text-lg flex-shrink-0">🖼</span>
+              <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5 truncate">
+                {fullTag}
+              </span>
+            </div>
+
+            {/* English prompt display */}
+            {prompt && (
+              <div className="bg-white border border-gray-200 rounded p-2">
+                <p className="text-[10px] text-gray-400 mb-1">English Prompt:</p>
+                <p className="text-xs text-gray-600 leading-relaxed">{prompt}</p>
+              </div>
+            )}
+
+            {/* Per-image action buttons */}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => onGenerateImage(fullTag)}
+                disabled={isGenerating}
+                className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isGenerating
+                  ? <><Spinner className="h-3 w-3" />生成中...</>
+                  : 'この画像を生成'
+                }
+              </button>
+              {prompt && (
+                <button
+                  onClick={() => onCopyPrompt(prompt)}
+                  className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                >
+                  プロンプトをコピー
+                </button>
+              )}
+              {!prompt && (
+                <button
+                  onClick={() => generatePromptsMutation.mutate({ articleId })}
+                  disabled={generatePromptsMutation.isPending}
+                  className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
+                >
+                  {generatePromptsMutation.isPending ? 'プロンプト生成中...' : 'プロンプト生成'}
+                </button>
+              )}
+            </div>
+
+            {/* Per-image error */}
+            {(status === 'failed' || error) && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                画像生成に失敗しました。プロンプトをコピーして
+                <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="underline ml-0.5">AI Studio</a>
+                で生成してください。
+              </div>
+            )}
+          </div>
+        );
+      }
+      return <p>{children}</p>;
+    },
+  };
 }

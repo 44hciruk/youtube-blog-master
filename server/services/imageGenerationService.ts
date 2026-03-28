@@ -12,6 +12,10 @@ export interface ImagePrompt {
   englishPrompt: string;
 }
 
+/** Photorealistic prefix/suffix for image prompts */
+const PHOTO_PREFIX = 'Professional editorial photograph, realistic, high-resolution stock photo style. ';
+const PHOTO_SUFFIX = ' Shot with natural lighting, shallow depth of field, clean composition. No illustration, no cartoon, no anime, no digital art, no AI-generated look.';
+
 /**
  * Detect all [画像：〇〇] tags in article markdown content
  */
@@ -49,8 +53,9 @@ async function generateEnglishPrompt(
       {
         role: 'system',
         content: `以下のブログ記事の画像説明を、画像生成AI用の英語プロンプトに変換してください。
-ブログのSEO画像として適切な、具体的で視覚的な描写にしてください。
-プロンプトのみを返してください。`,
+写真のようにリアルな画像を生成するためのプロンプトにしてください。
+イラスト・漫画・アニメ風ではなく、プロのカメラマンが撮影したような写真的描写にしてください。
+プロンプトのみを返してください（prefix/suffixは不要、本文の描写のみ）。`,
       },
       {
         role: 'user',
@@ -97,12 +102,20 @@ export async function generateImagePrompts(
 }
 
 /**
+ * Apply photorealistic prefix/suffix to a prompt
+ */
+export function applyPhotoRealisticStyle(prompt: string): string {
+  return `${PHOTO_PREFIX}${prompt}${PHOTO_SUFFIX}`;
+}
+
+/**
  * Generate a single image via Nano Banana 2 (gemini-3.1-flash-image-preview)
  */
-async function generateSingleImage(
+export async function generateSingleImage(
   englishPrompt: string,
   apiKey: string,
 ): Promise<string> {
+  const styledPrompt = applyPhotoRealisticStyle(englishPrompt);
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent';
 
   const res = await fetch(url, {
@@ -115,7 +128,7 @@ async function generateSingleImage(
       contents: [
         {
           parts: [
-            { text: `Generate a blog illustration: ${englishPrompt}` },
+            { text: styledPrompt },
           ],
         },
       ],
@@ -201,4 +214,32 @@ export async function generateImagesForArticle(
   }
 
   return results;
+}
+
+/**
+ * Generate a single image for a specific [画像：〇〇] tag.
+ * Used by the per-image generation endpoint.
+ */
+export async function generateSingleImageForTag(
+  tag: string,
+  googleApiKey: string,
+  openaiApiKey?: string,
+  articleTitle?: string,
+): Promise<GeneratedImage> {
+  const description = extractDescription(tag);
+
+  // Generate English prompt
+  let englishPrompt: string;
+  if (openaiApiKey && articleTitle) {
+    try {
+      englishPrompt = await generateEnglishPrompt(description, articleTitle, openaiApiKey);
+    } catch {
+      englishPrompt = `Professional blog photo: ${description}. Style: clean, bright natural light, modern background.`;
+    }
+  } else {
+    englishPrompt = `Professional blog photo: ${description}. Style: clean, bright natural light, modern background.`;
+  }
+
+  const base64 = await generateSingleImage(englishPrompt, googleApiKey);
+  return { tag, base64, prompt: englishPrompt };
 }
