@@ -237,7 +237,7 @@ export default function ArticleEditor() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col">
+    <div className="flex flex-col">
       <ToastContainer />
 
       {/* Fullscreen preview modal */}
@@ -392,19 +392,20 @@ export default function ArticleEditor() {
         </div>
       </div>
 
-      {/* Editor and Preview - 3:7 ratio */}
-      <div className="flex gap-4 flex-1 min-h-0">
+      {/* Editor and Preview - 3:7 ratio on desktop */}
+      <div className="lg:flex lg:gap-4">
         {/* Markdown Editor - 3/10 width on desktop */}
-        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[30%] lg:min-w-[280px]'} ${mobileTab !== 'edit' ? 'hidden lg:flex' : 'flex-1 lg:flex-none'}`}>
+        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[30%] lg:min-w-[280px]'} ${mobileTab !== 'edit' ? 'hidden lg:flex' : ''}`}>
           <div className="text-xs text-gray-500 mb-1 hidden lg:block">Markdownエディタ</div>
           <textarea
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
-            className="flex-1 w-full p-3 sm:p-4 border border-gray-300 rounded-lg font-mono text-sm resize-none outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-3 sm:p-4 border border-gray-300 rounded-lg font-mono text-sm resize-vertical outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            style={{ minHeight: '60vh' }}
             spellCheck={false}
           />
           {/* Word count */}
-          <div className="mt-1 text-xs flex items-center gap-1">
+          <div className="mt-1 mb-4 lg:mb-0 text-xs flex items-center gap-1">
             <span className="text-gray-500">現在：</span>
             <span className={wordCount >= 3000 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
               {wordCount.toLocaleString()}字
@@ -413,10 +414,10 @@ export default function ArticleEditor() {
           </div>
         </div>
 
-        {/* Preview - 7/10 width on desktop, min-height 80vh */}
-        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[70%]'} ${mobileTab !== 'preview' ? 'hidden lg:flex' : 'flex-1 lg:flex-none'}`}>
+        {/* Preview - 7/10 width on desktop */}
+        <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[70%]'} ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
           <div className="text-xs text-gray-500 mb-1 hidden lg:block">HTMLプレビュー</div>
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 border border-gray-300 rounded-lg bg-white prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5" style={{ minHeight: '80vh' }}>
+          <div className="p-4 sm:p-6 border border-gray-300 rounded-lg bg-white prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
             <div className="not-prose mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
               ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
             </div>
