@@ -14,6 +14,7 @@ const navItems = [
 
 function App() {
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userId, setUserId] = useState<number | null>(() => {
     const stored = localStorage.getItem('userId');
     return stored ? Number(stored) : null;
@@ -41,12 +42,15 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-xl font-bold text-gray-900 hover:text-gray-700">
-            <img src="/logo.svg" alt="TubeBlogGenerator" className="h-7 w-auto" />
-            TubeBlogGenerator
+        <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2 text-lg sm:text-xl font-bold text-gray-900 hover:text-gray-700">
+            <img src="/logo.svg" alt="TubeBlogGenerator" className="h-6 sm:h-7 w-auto" />
+            <span className="hidden sm:inline">TubeBlogGenerator</span>
+            <span className="sm:hidden">TBG</span>
           </Link>
-          <div className="flex items-center gap-6">
+
+          {/* Desktop nav */}
+          <div className="hidden md:flex items-center gap-6">
             <nav className="flex gap-4">
               {navItems.map((item) => (
                 <Link
@@ -64,17 +68,51 @@ function App() {
             </nav>
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <span>{userName}</span>
-              <button
-                onClick={handleLogout}
-                className="text-xs text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-gray-600">
                 ログアウト
               </button>
             </div>
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden p-2 text-gray-600 hover:text-gray-900"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="メニュー"
+          >
+            {mobileMenuOpen ? (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+            )}
+          </button>
         </div>
+
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-gray-200 bg-white">
+            <nav className="flex flex-col px-4 py-2">
+              {navItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`py-3 text-sm font-medium border-b border-gray-100 ${
+                    location.pathname === item.path ? 'text-blue-600' : 'text-gray-600'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+              <div className="py-3 flex items-center justify-between text-sm text-gray-500">
+                <span>{userName}</span>
+                <button onClick={handleLogout} className="text-xs text-red-500">ログアウト</button>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
-      <main className="max-w-7xl mx-auto px-4 py-8 flex-1">
+      <main className="max-w-7xl mx-auto px-4 py-4 sm:py-8 flex-1 w-full">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/settings" element={<ApiSettings />} />

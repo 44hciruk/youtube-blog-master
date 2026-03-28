@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { ArticleTable } from '../components/ArticleTable';
 import { useToast } from '../components/Toast';
+import { Tooltip } from '../components/Tooltip';
 
 const STEP_LABELS: Record<string, string> = {
   fetching_video: '動画情報を取得中...',
@@ -15,8 +16,15 @@ const STEP_LABELS: Record<string, string> = {
 
 const STEP_ORDER = ['fetching_video', 'fetching_transcript', 'generating_article', 'saving_article'];
 
+type SortOrder = 'newest' | 'oldest';
+type StatusFilter = 'all' | 'draft' | 'completed';
+
 export default function Dashboard() {
   const [videoUrl, setVideoUrl] = useState('');
+  const [manualTranscript, setManualTranscript] = useState('');
+  const [showManualTranscript, setShowManualTranscript] = useState(false);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const navigate = useNavigate();
   const { showToast, ToastContainer } = useToast();
 
@@ -55,7 +63,12 @@ export default function Dashboard() {
       showToast('YouTube URLを入力してください', 'error');
       return;
     }
-    navigate(`/generate?url=${encodeURIComponent(videoUrl)}`);
+    // Pass manual transcript via search params if provided
+    const params = new URLSearchParams({ url: videoUrl });
+    if (manualTranscript.trim()) {
+      params.set('transcript', manualTranscript.trim());
+    }
+    navigate(`/generate?${params.toString()}`);
   };
 
   const handleEdit = (articleId: number) => {
@@ -96,24 +109,37 @@ export default function Dashboard() {
 
   const currentStep = progressQuery.data?.step || 'idle';
 
+  // Sort and filter articles
+  const allArticles = articlesQuery.data?.articles || [];
+  const filteredArticles = allArticles
+    .filter((a) => statusFilter === 'all' || a.status === statusFilter)
+    .sort((a, b) => {
+      const dateA = a.generatedAt ? new Date(a.generatedAt).getTime() : 0;
+      const dateB = b.generatedAt ? new Date(b.generatedAt).getTime() : 0;
+      return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+    });
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <ToastContainer />
 
       {/* URL Input Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          新しい記事を生成
-        </h2>
-        <div className="flex gap-3">
-          <input
-            type="url"
-            value={videoUrl}
-            onChange={(e) => setVideoUrl(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=..."
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900"
-            onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-          />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">新しい記事を生成</h2>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 flex items-center gap-2">
+            <input
+              type="url"
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900 text-sm sm:text-base"
+              onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+            />
+            <Tooltip text="YouTubeの動画URLを貼り付けてください。通常動画・ショート両対応です。" />
+          </div>
           <button
             onClick={handleGenerate}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
@@ -121,22 +147,52 @@ export default function Dashboard() {
             生成開始
           </button>
         </div>
+
+        {/* Manual Transcript Input */}
+        <div className="mt-3">
+          <button
+            onClick={() => setShowManualTranscript(!showManualTranscript)}
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+          >
+            <svg className={`w-4 h-4 transition-transform ${showManualTranscript ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            字幕テキストを手動入力する（任意）
+            <Tooltip text="字幕があると記事の精度が上がります。YouTubeの文字起こし機能からコピーして貼り付けてください。" />
+          </button>
+          {showManualTranscript && (
+            <div className="mt-2 space-y-2">
+              <textarea
+                value={manualTranscript}
+                onChange={(e) => setManualTranscript(e.target.value)}
+                placeholder="YouTubeの文字起こしテキストをここに貼り付けてください..."
+                rows={5}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm resize-y"
+              />
+              <div className="flex items-start gap-2 text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                <span className="flex-shrink-0 mt-0.5">ℹ️</span>
+                <span>
+                  YouTubeの動画ページで「...」→「文字起こし」を開き、テキストをコピーして貼り付けてください。
+                  Chrome拡張「YouTube Transcript」を使うと一括コピーが便利です。
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Progress Display */}
       {isGenerating && (
-        <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-4 sm:p-6">
           <h3 className="text-sm font-semibold text-blue-900 mb-4">生成進捗</h3>
           <div className="space-y-3">
             {STEP_ORDER.map((step, idx) => {
               const currentIdx = STEP_ORDER.indexOf(currentStep);
               const isActive = step === currentStep;
               const isDone = currentIdx > idx || currentStep === 'completed';
-              const isPending = currentIdx < idx;
 
               return (
                 <div key={step} className="flex items-center gap-3">
-                  {/* Status icon */}
                   {isDone ? (
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
                       <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -153,8 +209,6 @@ export default function Dashboard() {
                   ) : (
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-200" />
                   )}
-
-                  {/* Label */}
                   <span className={`text-sm ${isActive ? 'text-blue-700 font-medium' : isDone ? 'text-green-700' : 'text-gray-400'}`}>
                     {STEP_LABELS[step]}
                   </span>
@@ -171,10 +225,29 @@ export default function Dashboard() {
       )}
 
       {/* Articles List */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          過去に生成した記事
-        </h2>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">過去に生成した記事</h2>
+          <div className="flex items-center gap-2">
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+              className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg bg-white text-gray-600"
+            >
+              <option value="newest">新しい順</option>
+              <option value="oldest">古い順</option>
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg bg-white text-gray-600"
+            >
+              <option value="all">すべて</option>
+              <option value="draft">下書き</option>
+              <option value="completed">完成</option>
+            </select>
+          </div>
+        </div>
         {articlesQuery.isLoading ? (
           <div className="text-center py-8 text-gray-500">読み込み中...</div>
         ) : articlesQuery.error ? (
@@ -183,7 +256,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <ArticleTable
-            articles={articlesQuery.data?.articles || []}
+            articles={filteredArticles}
             onEdit={handleEdit}
             onDelete={handleDelete}
             onExport={handleExport}

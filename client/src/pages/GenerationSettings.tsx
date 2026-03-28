@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
+import { Tooltip } from '../components/Tooltip';
 import {
   extractVideoId,
   fetchTranscriptFromBrowser,
@@ -12,15 +13,13 @@ type TranscriptStatus = 'idle' | 'fetching' | 'success' | 'failed';
 export default function GenerationSettings() {
   const [searchParams] = useSearchParams();
   const videoUrl = searchParams.get('url') || '';
+  const manualTranscript = searchParams.get('transcript') || '';
   const navigate = useNavigate();
   const { showToast, ToastContainer } = useToast();
 
-  const [articleLength, setArticleLength] = useState<'standard' | 'long'>(
-    'standard',
-  );
+  const [articleLength, setArticleLength] = useState<'standard' | 'long'>('standard');
   const [keywordsText, setKeywordsText] = useState('');
-  const [transcriptStatus, setTranscriptStatus] =
-    useState<TranscriptStatus>('idle');
+  const [transcriptStatus, setTranscriptStatus] = useState<TranscriptStatus>('idle');
   const [statusMessage, setStatusMessage] = useState('');
 
   const generateMutation = trpc.article.generate.useMutation({
@@ -45,30 +44,36 @@ export default function GenerationSettings() {
       .map((k) => k.trim())
       .filter(Boolean);
 
-    // Step 1: Try fetching transcript from browser
-    setTranscriptStatus('fetching');
-    setStatusMessage('字幕を取得中...');
-
     let transcript: string | null = null;
-    const videoId = extractVideoId(videoUrl);
 
-    if (videoId) {
-      try {
-        transcript = await fetchTranscriptFromBrowser(videoId);
-      } catch {
-        console.warn('[Generate] Browser transcript fetch failed');
+    // Use manual transcript if provided
+    if (manualTranscript.length > 50) {
+      setTranscriptStatus('success');
+      setStatusMessage('手動入力の字幕を使用して生成中...');
+      transcript = manualTranscript;
+    } else {
+      // Try fetching transcript from browser
+      setTranscriptStatus('fetching');
+      setStatusMessage('字幕を取得中...');
+
+      const videoId = extractVideoId(videoUrl);
+      if (videoId) {
+        try {
+          transcript = await fetchTranscriptFromBrowser(videoId);
+        } catch {
+          console.warn('[Generate] Browser transcript fetch failed');
+        }
+      }
+
+      if (transcript) {
+        setTranscriptStatus('success');
+        setStatusMessage('字幕取得完了！記事を生成中...');
+      } else {
+        setTranscriptStatus('failed');
+        setStatusMessage('字幕取得できませんでした。メタデータベースで生成します...');
       }
     }
 
-    if (transcript) {
-      setTranscriptStatus('success');
-      setStatusMessage('字幕取得完了！記事を生成中...');
-    } else {
-      setTranscriptStatus('failed');
-      setStatusMessage('字幕取得できませんでした。メタデータベースで生成します...');
-    }
-
-    // Step 2: Send to backend with transcript (or null)
     generateMutation.mutate({
       videoUrl,
       articleLength,
@@ -77,32 +82,38 @@ export default function GenerationSettings() {
     });
   };
 
-  const isProcessing =
-    generateMutation.isPending || transcriptStatus === 'fetching';
+  const isProcessing = generateMutation.isPending || transcriptStatus === 'fetching';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <ToastContainer />
 
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate('/')}
-          className="text-gray-500 hover:text-gray-700"
-        >
+        <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700">
           ← 戻る
         </button>
-        <h2 className="text-2xl font-bold text-gray-900">生成設定</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900">生成設定</h2>
       </div>
 
       {/* Video URL */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 break-all">
         対象動画: {videoUrl}
       </div>
 
+      {/* Manual transcript notice */}
+      {manualTranscript && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+          手動入力の字幕テキストを使用します（{manualTranscript.length}文字）
+        </div>
+      )}
+
       {/* Article Length */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-900 mb-3">記事の長さ</h3>
-        <div className="flex gap-3">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="font-semibold text-gray-900">記事の長さ</h3>
+          <Tooltip text="スタンダード（3,000字）はSEOの基本的な長さです。ロング（5,000字+）は競合が多いキーワードに効果的です。" />
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
           <label className="flex-1 flex items-center gap-2 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50">
             <input
               type="radio"
@@ -125,10 +136,11 @@ export default function GenerationSettings() {
       </div>
 
       {/* SEO Keywords */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-900 mb-3">
-          ターゲットキーワード（任意）
-        </h3>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="font-semibold text-gray-900">ターゲットキーワード（任意）</h3>
+          <Tooltip text="狙いたい検索キーワードを入力してください。例：スーツ 着こなし、ネイビースーツ コーデ\nカンマ区切りで複数入力できます。" />
+        </div>
         <input
           type="text"
           value={keywordsText}
@@ -136,9 +148,6 @@ export default function GenerationSettings() {
           placeholder="例：スーツ, 着こなし, マナー"
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
         />
-        <p className="text-xs text-gray-500 mt-1">
-          カンマ区切りで複数入力できます
-        </p>
       </div>
 
       {/* Status message */}
@@ -154,24 +163,9 @@ export default function GenerationSettings() {
         >
           <span className="flex items-center gap-2">
             {transcriptStatus === 'fetching' && (
-              <svg
-                className="animate-spin h-4 w-4"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             )}
             {statusMessage}
@@ -188,20 +182,8 @@ export default function GenerationSettings() {
         {isProcessing ? (
           <span className="flex items-center justify-center gap-2">
             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-                fill="none"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-              />
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             生成中... (数分かかる場合があります)
           </span>
