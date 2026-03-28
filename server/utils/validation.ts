@@ -66,6 +66,8 @@ export const generateArticleSchema = z.object({
   }),
   articleLength: articleLengthSchema.default('standard'),
   seoKeywords: z.array(z.string()).default([]),
+  // Transcript fetched from browser (bypasses server-side bot detection)
+  transcript: z.string().optional(),
 });
 
 export const updateArticleSchema = z.object({

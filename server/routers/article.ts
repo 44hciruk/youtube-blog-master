@@ -80,12 +80,35 @@ export const articleRouter = router({
         setProgress(progressKey, 'fetching_video', '動画情報を取得中...');
         const metadata = await getVideoMetadata(videoId, youtubeApiKey);
 
-        // Step 2: Fetch transcript
-        setProgress(progressKey, 'fetching_transcript', '字幕を取得中...');
-        const transcriptResult = await getVideoTranscript(videoId, youtubeApiKey);
-        const normalizedTranscript = normalizeTranscript(transcriptResult.transcript);
-        const extractedKeywords = extractKeywords(normalizedTranscript);
-        const mainPoints = extractMainPoints(normalizedTranscript);
+        // Step 2: Get transcript (prefer browser-provided, fallback to server-side, then metadata)
+        let normalizedTranscript: string;
+        let extractedKeywords: string[];
+        let mainPoints: string[];
+
+        if (input.transcript && input.transcript.length > 100) {
+          // Use transcript provided by browser (bypasses bot detection)
+          setProgress(progressKey, 'fetching_transcript', 'ブラウザ経由の字幕を処理中...');
+          console.log(`[Article] Using browser-provided transcript: ${input.transcript.length} chars`);
+          normalizedTranscript = normalizeTranscript(input.transcript);
+          extractedKeywords = extractKeywords(normalizedTranscript);
+          mainPoints = extractMainPoints(normalizedTranscript);
+        } else {
+          // Try server-side transcript fetch
+          setProgress(progressKey, 'fetching_transcript', '字幕を取得中...');
+          try {
+            const transcriptResult = await getVideoTranscript(videoId, youtubeApiKey);
+            normalizedTranscript = normalizeTranscript(transcriptResult.transcript);
+            extractedKeywords = extractKeywords(normalizedTranscript);
+            mainPoints = extractMainPoints(normalizedTranscript);
+          } catch (transcriptError) {
+            // Final fallback: generate from metadata (title + description)
+            console.log('[Article] All transcript methods failed, using metadata-based generation');
+            setProgress(progressKey, 'fetching_transcript', 'メタデータベースで生成します...');
+            normalizedTranscript = `${metadata.title}。${metadata.description}`;
+            extractedKeywords = extractKeywords(normalizedTranscript);
+            mainPoints = extractMainPoints(normalizedTranscript);
+          }
+        }
 
         // Step 3: Generate article with AI
         setProgress(progressKey, 'generating_article', 'AIが記事を生成中...');
