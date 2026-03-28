@@ -200,13 +200,22 @@ export default function ArticleEditor() {
         {/* Preview */}
         <div className={previewExpanded ? 'w-full' : 'flex-1'}>
           <div className="text-xs text-gray-500 mb-1">HTMLプレビュー</div>
-          <div className="h-full overflow-y-auto p-6 border border-gray-300 rounded-lg bg-white prose prose-sm max-w-none">
+          <div className="h-full overflow-y-auto p-6 border border-gray-300 rounded-lg bg-white prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
             <div className="not-prose mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
               ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
             </div>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
+                h1: ({ children }) => (
+                  <h1 className="text-2xl font-bold border-b border-gray-200 pb-2 mb-4">{children}</h1>
+                ),
+                h2: ({ children }) => (
+                  <h2 className="text-xl font-bold mt-8 mb-3 text-gray-900">{children}</h2>
+                ),
+                h3: ({ children }) => (
+                  <h3 className="text-lg font-semibold mt-6 mb-2 text-gray-800">{children}</h3>
+                ),
                 p: ({ children }) => {
                   const text = String(children).trim();
                   const imageMatch = text.match(/^\[画像：(.+?)\]$/);

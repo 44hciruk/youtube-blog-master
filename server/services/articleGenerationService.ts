@@ -135,15 +135,7 @@ function composeMarkdown(data: {
   // ========================================
   sections.push(`# ${data.title}\n`);
 
-  // Lead paragraph: what readers will learn
-  const introLength = data.articleLength === 'long' ? 3 : 2;
-  const introSentences = data.coreKnowledge
-    .split(/[。\n]/)
-    .filter((s) => s.trim())
-    .slice(0, introLength);
-  sections.push(introSentences.join('。') + '。\n');
-
-  // "What you'll learn" box
+  // "What you'll learn" box (uses keyInsights only, no duplication with body)
   if (data.keyInsights.length > 0) {
     sections.push(`**この記事でわかること：**\n`);
     for (const insight of data.keyInsights.slice(0, 5)) {
@@ -156,7 +148,7 @@ function composeMarkdown(data: {
   // Part 2: 中盤 — 詳細解説（H2で2〜4セクション）
   // ========================================
 
-  // Core knowledge section
+  // Core knowledge section (detailed body — intro is handled by keyInsights above)
   sections.push(`## 押さえておくべきポイントとは\n`);
   sections.push(data.coreKnowledge + '\n');
 

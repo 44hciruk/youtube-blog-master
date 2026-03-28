@@ -103,6 +103,12 @@ export async function transformToUserVoice(
 4. ${toneInstruction}
 5. 100文字程度のメタディスクリプション（検索結果に表示される要約文）を生成
 
+【重要：冒頭重複の防止】
+- coreKnowledgeには詳細な解説本文のみを含めること
+- 「この記事では〜を解説します」のような導入文はcoreKnowledgeに含めないこと
+- keyInsightsはcoreKnowledgeの内容を繰り返さず、箇条書き用の簡潔なポイントにすること
+- 冒頭の要約・導入はmetaDescriptionとkeyInsightsが担うため、coreKnowledgeでは繰り返さないこと
+
 ${ANTI_HALLUCINATION_RULE}
 ${SEO_STRUCTURE_RULE}`,
       },
@@ -123,12 +129,12 @@ ${transcript}`,
           properties: {
             coreKnowledge: {
               type: 'string',
-              description: '筆者の知見として再構成されたテキスト',
+              description: '筆者の知見として再構成された本文テキスト。冒頭の導入文・要約は含めず、詳細な解説のみを記述すること。',
             },
             keyInsights: {
               type: 'array',
               items: { type: 'string' },
-              description: '抽出された主要なインサイト（5-10個）',
+              description: '抽出された主要なインサイト（5-10個）。本文(coreKnowledge)の内容と重複しない、簡潔な箇条書き用テキスト。',
             },
             metaDescription: {
               type: 'string',
