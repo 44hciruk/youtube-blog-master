@@ -1,5 +1,4 @@
 import { extractVideoId } from '../utils/validation';
-import { YoutubeTranscript } from 'youtube-transcript';
 
 interface VideoMetadata {
   videoId: string;
@@ -111,10 +110,10 @@ export async function getVideoTranscript(
 ): Promise<{ transcript: string; segments: TranscriptSegment[]; language: string }> {
   console.log(`[YouTube] Attempting to fetch transcript for video: ${videoId}`);
 
-  // Strategy 1: youtube-transcript package (most reliable)
+  // Strategy 1: Android innertube API (most reliable, no scraping needed)
   try {
-    console.log('[YouTube] Strategy 1: youtube-transcript package');
-    const result = await fetchWithYoutubeTranscriptPackage(videoId);
+    console.log('[YouTube] Strategy 1: Android innertube API');
+    const result = await fetchAndroidInnertubeTranscript(videoId);
     if (result && result.transcript.length > 50) {
       console.log(`[YouTube] Strategy 1 succeeded: ${result.transcript.length} chars, lang=${result.language}`);
       return result;
@@ -190,43 +189,93 @@ export async function getVideoTranscript(
 }
 
 /**
- * Strategy 1: Use youtube-transcript npm package
+ * Strategy 1: Use YouTube Android innertube API directly
+ * This is the same approach used by youtube-transcript package internally,
+ * but implemented directly to avoid ESM/CJS compatibility issues.
  */
-async function fetchWithYoutubeTranscriptPackage(
+async function fetchAndroidInnertubeTranscript(
   videoId: string,
 ): Promise<{ transcript: string; segments: TranscriptSegment[]; language: string } | null> {
-  const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, {
-    lang: 'ja',
+  const INNERTUBE_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+  const CLIENT_VERSION = '20.10.38';
+  const USER_AGENT = `com.google.android.youtube/${CLIENT_VERSION} (Linux; U; Android 14)`;
+
+  // Step 1: Get player response with caption tracks
+  const playerRes = await fetch(INNERTUBE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': USER_AGENT,
+    },
+    body: JSON.stringify({
+      context: {
+        client: {
+          clientName: 'ANDROID',
+          clientVersion: CLIENT_VERSION,
+        },
+      },
+      videoId,
+    }),
   });
 
-  if (!transcriptItems || transcriptItems.length === 0) {
-    // Try without language specification (auto-detect)
-    const fallbackItems = await YoutubeTranscript.fetchTranscript(videoId);
-    if (!fallbackItems || fallbackItems.length === 0) {
-      return null;
-    }
-    const segments: TranscriptSegment[] = fallbackItems.map(item => ({
-      text: item.text,
-      start: item.offset / 1000,
-      duration: item.duration / 1000,
-    }));
-    return {
-      transcript: segments.map(s => s.text).join(' '),
-      segments,
-      language: 'auto',
-    };
+  if (!playerRes.ok) {
+    console.log(`[YouTube] innertube player API returned ${playerRes.status}`);
+    return null;
   }
 
-  const segments: TranscriptSegment[] = transcriptItems.map(item => ({
-    text: item.text,
-    start: item.offset / 1000,
-    duration: item.duration / 1000,
-  }));
+  const playerData = await playerRes.json() as Record<string, unknown>;
+
+  // Check if video is available
+  const playabilityStatus = playerData.playabilityStatus as Record<string, unknown> | undefined;
+  if (playabilityStatus?.status === 'ERROR' || playabilityStatus?.status === 'UNPLAYABLE') {
+    console.log(`[YouTube] Video unavailable: ${playabilityStatus.status}`);
+    return null;
+  }
+
+  const captions = playerData.captions as Record<string, unknown> | undefined;
+  const renderer = captions?.playerCaptionsTracklistRenderer as Record<string, unknown> | undefined;
+  const captionTracks = renderer?.captionTracks as Array<Record<string, string>> | undefined;
+
+  if (!captionTracks || captionTracks.length === 0) {
+    console.log('[YouTube] innertube: no caption tracks in player response');
+    return null;
+  }
+
+  console.log(`[YouTube] innertube: found ${captionTracks.length} tracks: ${captionTracks.map(t => t.languageCode).join(', ')}`);
+
+  // Find best track (prefer ja, then any)
+  const track =
+    captionTracks.find(t => t.languageCode === 'ja') ||
+    captionTracks.find(t => t.languageCode?.startsWith('ja')) ||
+    captionTracks[0];
+
+  if (!track.baseUrl) {
+    console.log('[YouTube] innertube: track has no baseUrl');
+    return null;
+  }
+
+  // Step 2: Fetch the caption XML
+  const captionRes = await fetch(track.baseUrl);
+  if (!captionRes.ok) {
+    console.log(`[YouTube] innertube: caption XML fetch returned ${captionRes.status}`);
+    return null;
+  }
+
+  const captionXml = await captionRes.text();
+  const segments = parseTranscriptXml(captionXml);
+
+  if (segments.length === 0) {
+    console.log('[YouTube] innertube: parsed 0 segments');
+    return null;
+  }
+
+  const transcript = segments.map(s => s.text).join(' ');
+  console.log(`[YouTube] innertube: got ${segments.length} segments, ${transcript.length} chars`);
 
   return {
-    transcript: segments.map(s => s.text).join(' '),
+    transcript,
     segments,
-    language: 'ja',
+    language: track.languageCode || 'ja',
   };
 }
 
