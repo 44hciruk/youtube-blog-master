@@ -53,13 +53,23 @@ export const userRouter = router({
 
         if (input.keyType === 'google') {
           const res = await fetch(
-            `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=dummy&q=test`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: 'test' }] }],
+              }),
+            },
           );
-          // 400 (missing cx) means key is valid; 403 means invalid key
-          if (res.status === 403) {
-            throw new Error('Google API Key が無効です');
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            const errorMsg = (errorData as Record<string, unknown>)?.error
+              ? JSON.stringify((errorData as Record<string, unknown>).error)
+              : `status ${res.status}`;
+            throw new Error(`Google API Key が無効です: ${errorMsg}`);
           }
-          return { success: true, message: 'Google API接続成功' };
+          return { success: true, message: 'Google API（Gemini）接続成功' };
         }
 
         return { success: false, message: '不明なキータイプ' };
