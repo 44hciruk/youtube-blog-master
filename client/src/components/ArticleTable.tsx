@@ -34,7 +34,6 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
               <th className="py-3 px-4 font-medium">タイトル</th>
               <th className="py-3 px-4 font-medium">生成日時</th>
               <th className="py-3 px-4 font-medium text-right">文字数</th>
-              <th className="py-3 px-4 font-medium">ステータス</th>
               <th className="py-3 px-4 font-medium text-right">操作</th>
             </tr>
           </thead>
@@ -57,9 +56,6 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
                 <td className="py-3 px-4 text-right text-gray-500">
                   {article.wordCount?.toLocaleString() || '-'}
                 </td>
-                <td className="py-3 px-4">
-                  <StatusBadge status={article.status} />
-                </td>
                 <td className="py-3 px-4 text-right">
                   <ActionButtons article={article} onEdit={onEdit} onDelete={onDelete} onExport={onExport} />
                 </td>
@@ -73,15 +69,12 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
       <div className="md:hidden space-y-3">
         {articles.map((article) => (
           <div key={article.id} className="border border-gray-200 rounded-lg p-4 bg-white">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <button
-                onClick={() => onEdit(article.id)}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800 text-left leading-snug"
-              >
-                {article.title}
-              </button>
-              <StatusBadge status={article.status} />
-            </div>
+            <button
+              onClick={() => onEdit(article.id)}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 text-left leading-snug mb-2 block"
+            >
+              {article.title}
+            </button>
             <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
               <span>
                 {article.generatedAt
@@ -95,20 +88,6 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
         ))}
       </div>
     </>
-  );
-}
-
-function StatusBadge({ status }: { status: 'draft' | 'completed' | null }) {
-  return (
-    <span
-      className={`inline-block px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${
-        status === 'completed'
-          ? 'bg-green-100 text-green-700'
-          : 'bg-yellow-100 text-yellow-700'
-      }`}
-    >
-      {status === 'completed' ? '完成' : '下書き'}
-    </span>
   );
 }
 

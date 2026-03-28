@@ -176,7 +176,6 @@ export default function ArticleEditor() {
   const [imageStatuses, setImageStatuses] = useState<Map<string, ImageStatus>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [retryInfo, setRetryInfo] = useState<Map<string, { attempt: number; max: number }>>(new Map());
-  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
   // Mobile: tab switch; Desktop: side-by-side or expanded
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
   const [previewExpanded, setPreviewExpanded] = useState(false);
@@ -225,11 +224,6 @@ export default function ArticleEditor() {
   });
 
   const generateSingleImageMutation = trpc.article.generateSingleImage.useMutation();
-
-  const suggestTitlesMutation = trpc.article.suggestTitles.useMutation({
-    onSuccess: () => setShowTitleSuggestions(true),
-    onError: (err) => showToast(err.message, 'error'),
-  });
 
   useEffect(() => {
     if (articleQuery.data) {
@@ -378,81 +372,50 @@ export default function ArticleEditor() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header - Row 1: Back + Title + Save */}
       <div className="flex flex-col gap-2 mb-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700 flex-shrink-0 text-sm">
+            ← 戻る
+          </button>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="text-base sm:text-xl font-bold text-gray-900 border-none outline-none bg-transparent min-w-0 flex-1"
+          />
+          <button
+            onClick={handleSave}
+            disabled={updateMutation.isPending}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex-shrink-0"
+          >
+            保存
+          </button>
+        </div>
+
+        {/* Header - Row 2: Toolbar */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-            <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700 flex-shrink-0 text-sm">
-              ← 戻る
-            </button>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="text-base sm:text-xl font-bold text-gray-900 border-none outline-none bg-transparent min-w-0 flex-1"
-            />
-            {/* Title suggestions */}
-            <div className="relative flex-shrink-0">
-              <button
-                onClick={() => {
-                  if (showTitleSuggestions) {
-                    setShowTitleSuggestions(false);
-                  } else {
-                    suggestTitlesMutation.mutate({ articleId });
-                  }
-                }}
-                disabled={suggestTitlesMutation.isPending}
-                className="px-2 py-1 text-[10px] sm:text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
-              >
-                {suggestTitlesMutation.isPending ? <Spinner className="h-3 w-3" /> : null}
-                他の候補
-              </button>
-              {showTitleSuggestions && suggestTitlesMutation.data?.titles && (
-                <div className="absolute right-0 top-full mt-1 z-20 w-72 sm:w-96 bg-white border border-gray-200 rounded-lg shadow-lg p-2 space-y-1">
-                  {suggestTitlesMutation.data.titles.map((t, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        setTitle(t);
-                        setShowTitleSuggestions(false);
-                        showToast('タイトルを変更しました', 'success');
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded transition-colors"
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          {/* Desktop buttons */}
-          <div className="hidden lg:flex gap-2 flex-shrink-0">
+          <div className="flex gap-1.5 sm:gap-2">
             <button
               onClick={() => imageInstructionsMutation.mutate({ articleId })}
               disabled={imageInstructionsMutation.isPending}
-              className="px-3 py-2 text-sm bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg hover:bg-yellow-100 disabled:opacity-50"
+              className="px-2 sm:px-3 py-1.5 text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg hover:bg-yellow-100 disabled:opacity-50"
             >
               画像指示追加
             </button>
             <button
               onClick={handleGenerateImages}
               disabled={generateImagesMutation.isPending}
-              className="px-3 py-2 text-sm bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 flex items-center gap-1.5"
+              className="px-2 sm:px-3 py-1.5 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 flex items-center gap-1"
             >
-              {generateImagesMutation.isPending ? <><Spinner className="h-3.5 w-3.5" />生成中...</> : '全画像を生成'}
+              {generateImagesMutation.isPending ? <><Spinner className="h-3 w-3" />生成中...</> : '全画像を生成'}
             </button>
-            <button
-              onClick={handleSave}
-              disabled={updateMutation.isPending}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              保存
-            </button>
+          </div>
+          <div className="flex gap-1.5 sm:gap-2">
             <div className="relative">
               <button
                 onClick={handleCopyWordPress}
-                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1"
+                className="px-2 sm:px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1"
               >
                 WPコピー
                 <Tooltip text="WordPressの投稿画面でHTMLモードにして貼り付けてください。メタディスクリプションもコメントとして含まれます。" />
@@ -460,25 +423,9 @@ export default function ArticleEditor() {
             </div>
             <button
               onClick={() => setPreviewExpanded(true)}
-              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-2 sm:px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               プレビュー拡大
-            </button>
-          </div>
-          {/* Mobile buttons */}
-          <div className="flex lg:hidden gap-1.5 flex-shrink-0">
-            <button
-              onClick={handleSave}
-              disabled={updateMutation.isPending}
-              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              保存
-            </button>
-            <button
-              onClick={handleCopyWordPress}
-              className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              WP
             </button>
           </div>
         </div>
@@ -503,8 +450,8 @@ export default function ArticleEditor() {
           </div>
         )}
 
-        {/* Mobile tab switcher + extra buttons */}
-        <div className="lg:hidden flex items-center justify-between">
+        {/* Mobile tab switcher */}
+        <div className="lg:hidden flex items-center">
           <div className="flex rounded-lg border border-gray-300 overflow-hidden">
             <button
               onClick={() => setMobileTab('edit')}
@@ -517,22 +464,6 @@ export default function ArticleEditor() {
               className={`px-4 py-1.5 text-xs font-medium ${mobileTab === 'preview' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
             >
               プレビュー
-            </button>
-          </div>
-          <div className="flex gap-1">
-            <button
-              onClick={() => imageInstructionsMutation.mutate({ articleId })}
-              disabled={imageInstructionsMutation.isPending}
-              className="px-2 py-1 text-[10px] bg-yellow-50 text-yellow-700 border border-yellow-200 rounded hover:bg-yellow-100 disabled:opacity-50"
-            >
-              画像指示
-            </button>
-            <button
-              onClick={handleGenerateImages}
-              disabled={generateImagesMutation.isPending}
-              className="px-2 py-1 text-[10px] bg-purple-50 text-purple-700 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50"
-            >
-              全画像生成
             </button>
           </div>
         </div>

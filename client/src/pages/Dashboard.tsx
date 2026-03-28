@@ -18,14 +18,12 @@ const STEP_LABELS: Record<string, string> = {
 const STEP_ORDER = ['fetching_video', 'fetching_transcript', 'generating_article', 'saving_article'];
 
 type SortOrder = 'newest' | 'oldest';
-type StatusFilter = 'all' | 'draft' | 'completed';
 
 export default function Dashboard() {
   const [videoUrl, setVideoUrl] = useState('');
   const [manualTranscript, setManualTranscript] = useState('');
   const [showManualTranscript, setShowManualTranscript] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const navigate = useNavigate();
   const { showToast, ToastContainer } = useToast();
 
@@ -110,10 +108,9 @@ export default function Dashboard() {
 
   const currentStep = progressQuery.data?.step || 'idle';
 
-  // Sort and filter articles
+  // Sort articles
   const allArticles = articlesQuery.data?.articles || [];
   const filteredArticles = allArticles
-    .filter((a) => statusFilter === 'all' || a.status === statusFilter)
     .sort((a, b) => {
       const dateA = a.generatedAt ? new Date(a.generatedAt).getTime() : 0;
       const dateB = b.generatedAt ? new Date(b.generatedAt).getTime() : 0;
@@ -240,15 +237,6 @@ export default function Dashboard() {
             >
               <option value="newest">新しい順</option>
               <option value="oldest">古い順</option>
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="text-xs px-2 py-1.5 border border-gray-300 rounded-lg bg-white text-gray-600"
-            >
-              <option value="all">すべて</option>
-              <option value="draft">下書き</option>
-              <option value="completed">完成</option>
             </select>
           </div>
         </div>
