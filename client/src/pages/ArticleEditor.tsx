@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import JSZip from 'jszip';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Tooltip } from '../components/Tooltip';
@@ -301,13 +302,43 @@ export default function ArticleEditor() {
     updateMutation.mutate({ articleId, title, markdownContent: markdown, status: 'draft' });
   }, [articleId, title, markdown, updateMutation]);
 
-  const handleCopyWordPress = async () => {
+  const [htmlCopied, setHtmlCopied] = useState(false);
+
+  const handleCopyHtml = async () => {
     try {
       const html = markdownToWordPressHtml(markdown, imageMap, metaDescription);
       await navigator.clipboard.writeText(html);
-      showToast('WordPressへコピーしました', 'success');
+      setHtmlCopied(true);
+      setTimeout(() => setHtmlCopied(false), 2000);
     } catch {
       showToast('コピーに失敗しました', 'error');
+    }
+  };
+
+  const handleDownloadImages = async () => {
+    if (images.length === 0) return;
+    try {
+      const zip = new JSZip();
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        // Extract description from tag like [画像：description]
+        const descMatch = img.tag.match(/^\[画像：(.+?)\]$/);
+        const desc = descMatch ? descMatch[1] : `image_${i + 1}`;
+        const fileName = `${String(i + 1).padStart(2, '0')}_${desc}.png`;
+        // base64 data URL → raw binary
+        const base64Data = img.base64.replace(/^data:image\/\w+;base64,/, '');
+        zip.file(fileName, base64Data, { base64: true });
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title || '記事'}_images.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`${images.length}枚の画像をダウンロードしました`, 'success');
+    } catch {
+      showToast('ダウンロードに失敗しました', 'error');
     }
   };
 
@@ -378,8 +409,9 @@ export default function ArticleEditor() {
                 <p className="text-sm text-[#374151] leading-relaxed">{metaDescription}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`text-xs font-mono ${metaDescription.length >= 100 && metaDescription.length <= 120 ? 'text-[#6B7280]' : 'text-[#6B7280]'}`}>
+                <span className="text-xs font-mono text-[#6B7280]">
                   {metaDescription.length}字
+                  <span className="text-[10px] ml-1">（推奨: 120〜160字）</span>
                 </span>
                 <button onClick={handleCopyMeta} className="px-2 py-1 text-xs border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6]">
                   コピー
@@ -408,15 +440,13 @@ export default function ArticleEditor() {
             </button>
           </div>
           <div className="flex gap-1.5 sm:gap-2">
-            <div className="relative">
-              <button
-                onClick={handleCopyWordPress}
-                className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] flex items-center gap-1 transition-colors"
-              >
-                WPコピー
-                <Tooltip text="WordPressの投稿画面でHTMLモードにして貼り付けてください。メタディスクリプションもコメントとして含まれます。" />
-              </button>
-            </div>
+            <button
+              onClick={handleDownloadImages}
+              disabled={images.length === 0}
+              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              画像DL
+            </button>
           </div>
         </div>
 
@@ -463,7 +493,15 @@ export default function ArticleEditor() {
 
         {/* Preview - 7/10 width on desktop */}
         <div className={`flex flex-col lg:w-[70%] ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
-          <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">HTMLプレビュー</div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs text-[#6B7280] hidden lg:block">HTMLプレビュー</div>
+            <button
+              onClick={handleCopyHtml}
+              className="text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] px-2 py-0.5 rounded transition-colors"
+            >
+              {htmlCopied ? 'コピーしました' : 'HTMLをコピー'}
+            </button>
+          </div>
           <div className="p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
             <div className="not-prose mb-4 px-3 py-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded text-xs text-[#6B7280]">
               ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください

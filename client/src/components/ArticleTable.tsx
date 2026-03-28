@@ -131,7 +131,7 @@ function ActionButtons({
         onClick={() => onExport(article.id, 'wordpress')}
         className="px-2 py-1 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded transition-colors"
       >
-        WP
+        HTML
       </button>
       <button
         onClick={() => onDelete(article.id)}
