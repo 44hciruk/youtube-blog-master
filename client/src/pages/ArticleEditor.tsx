@@ -336,10 +336,10 @@ export default function ArticleEditor() {
   const seoKeywords = useMemo(() => extractKeywordsWithCount(markdown), [markdown]);
 
   if (articleQuery.isLoading) {
-    return <div className="text-center py-12 text-gray-500">読み込み中...</div>;
+    return <div className="text-center py-12 text-[#6B7280]">読み込み中...</div>;
   }
   if (articleQuery.error) {
-    return <div className="text-center py-12 text-red-500">エラー: {articleQuery.error.message}</div>;
+    return <div className="text-center py-12 text-[#EF4444]">エラー: {articleQuery.error.message}</div>;
   }
 
   return (
@@ -349,17 +349,17 @@ export default function ArticleEditor() {
       {/* Fullscreen preview modal */}
       {previewExpanded && (
         <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700">HTMLプレビュー</span>
+          <div className="sticky top-0 z-10 bg-white border-b border-[#E5E7EB] px-4 py-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-[#6B7280]">HTMLプレビュー</span>
             <button
               onClick={() => setPreviewExpanded(false)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-3 py-1.5 text-xs border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6]"
             >
               閉じる
             </button>
           </div>
-          <div className="max-w-4xl mx-auto p-6 sm:p-8 prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
-            <div className="not-prose mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+          <div className="max-w-4xl mx-auto p-6 sm:p-8 prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
+            <div className="not-prose mb-4 px-3 py-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded text-xs text-[#6B7280]">
               ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
             </div>
             <ReactMarkdown
@@ -374,39 +374,59 @@ export default function ArticleEditor() {
 
       {/* Header - Row 1: Back + Title + Save */}
       <div className="flex flex-col gap-2 mb-3">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-700 flex-shrink-0 text-sm">
+        <div className="flex items-center gap-2 sm:gap-3 pb-2 border-b border-[#E5E7EB]">
+          <button onClick={() => navigate('/')} className="text-[#6B7280] hover:text-[#111827] flex-shrink-0 text-sm transition-colors">
             ← 戻る
           </button>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-base sm:text-xl font-bold text-gray-900 border-none outline-none bg-transparent min-w-0 flex-1"
+            className="text-base sm:text-xl font-semibold text-[#111827] border-none outline-none bg-transparent min-w-0 flex-1"
           />
           <button
             onClick={handleSave}
             disabled={updateMutation.isPending}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex-shrink-0"
+            className="px-4 py-2 text-sm bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] disabled:opacity-50 flex-shrink-0 font-medium"
           >
             保存
           </button>
         </div>
 
-        {/* Header - Row 2: Toolbar */}
-        <div className="flex items-center justify-between">
+        {/* Meta Description */}
+        {metaDescription && (
+          <div className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-[#6B7280] mb-0.5">メタディスクリプション</p>
+                <p className="text-sm text-[#374151] leading-relaxed">{metaDescription}</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={`text-xs font-mono ${metaDescription.length >= 100 && metaDescription.length <= 120 ? 'text-[#6B7280]' : 'text-[#6B7280]'}`}>
+                  {metaDescription.length}字
+                </span>
+                <button onClick={handleCopyMeta} className="px-2 py-1 text-xs border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6]">
+                  コピー
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toolbar row */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex gap-1.5 sm:gap-2">
             <button
               onClick={() => imageInstructionsMutation.mutate({ articleId })}
               disabled={imageInstructionsMutation.isPending}
-              className="px-2 sm:px-3 py-1.5 text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg hover:bg-yellow-100 disabled:opacity-50"
+              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50 transition-colors"
             >
               画像指示追加
             </button>
             <button
               onClick={handleGenerateImages}
               disabled={generateImagesMutation.isPending}
-              className="px-2 sm:px-3 py-1.5 text-xs bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 flex items-center gap-1"
+              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50 flex items-center gap-1 transition-colors"
             >
               {generateImagesMutation.isPending ? <><Spinner className="h-3 w-3" />生成中...</> : '全画像を生成'}
             </button>
@@ -415,7 +435,7 @@ export default function ArticleEditor() {
             <div className="relative">
               <button
                 onClick={handleCopyWordPress}
-                className="px-2 sm:px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1"
+                className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] flex items-center gap-1 transition-colors"
               >
                 WPコピー
                 <Tooltip text="WordPressの投稿画面でHTMLモードにして貼り付けてください。メタディスクリプションもコメントとして含まれます。" />
@@ -423,45 +443,25 @@ export default function ArticleEditor() {
             </div>
             <button
               onClick={() => setPreviewExpanded(true)}
-              className="px-2 sm:px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] transition-colors"
             >
               プレビュー拡大
             </button>
           </div>
         </div>
 
-        {/* Meta Description */}
-        {metaDescription && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-gray-500 mb-0.5">メタディスクリプション</p>
-                <p className="text-sm text-gray-700 leading-relaxed">{metaDescription}</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={`text-xs ${metaDescription.length >= 100 && metaDescription.length <= 120 ? 'text-green-600' : 'text-amber-600'}`}>
-                  {metaDescription.length}字
-                </span>
-                <button onClick={handleCopyMeta} className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50">
-                  コピー
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Mobile tab switcher */}
         <div className="lg:hidden flex items-center">
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+          <div className="flex rounded-lg border border-[#E5E7EB] overflow-hidden">
             <button
               onClick={() => setMobileTab('edit')}
-              className={`px-4 py-1.5 text-xs font-medium ${mobileTab === 'edit' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+              className={`px-4 py-1.5 text-xs font-medium transition-colors ${mobileTab === 'edit' ? 'bg-[#2563EB] text-white' : 'bg-white text-[#6B7280]'}`}
             >
               編集
             </button>
             <button
               onClick={() => setMobileTab('preview')}
-              className={`px-4 py-1.5 text-xs font-medium ${mobileTab === 'preview' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+              className={`px-4 py-1.5 text-xs font-medium transition-colors ${mobileTab === 'preview' ? 'bg-[#2563EB] text-white' : 'bg-white text-[#6B7280]'}`}
             >
               プレビュー
             </button>
@@ -473,29 +473,29 @@ export default function ArticleEditor() {
       <div className="lg:flex lg:gap-4">
         {/* Markdown Editor - 3/10 width on desktop */}
         <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[30%] lg:min-w-[280px]'} ${mobileTab !== 'edit' ? 'hidden lg:flex' : ''}`}>
-          <div className="text-xs text-gray-500 mb-1 hidden lg:block">Markdownエディタ</div>
+          <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">Markdownエディタ</div>
           <textarea
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
-            className="w-full p-3 sm:p-4 border border-gray-300 rounded-lg font-mono text-sm resize-vertical outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            style={{ minHeight: '60vh' }}
+            className="w-full p-3 sm:p-4 border border-[#E5E7EB] rounded-xl text-sm resize-vertical outline-none focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB]"
+            style={{ minHeight: '60vh', fontFamily: "'JetBrains Mono', 'Noto Sans JP', monospace" }}
             spellCheck={false}
           />
           {/* Word count */}
           <div className="mt-1 mb-4 lg:mb-0 text-xs flex items-center gap-1">
-            <span className="text-gray-500">現在：</span>
-            <span className={wordCount >= 3000 ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
+            <span className="text-[#6B7280]">現在：</span>
+            <span className={`font-medium font-mono ${wordCount >= 3000 ? 'text-[#111827]' : 'text-[#EF4444]'}`}>
               {wordCount.toLocaleString()}字
             </span>
-            <span className="text-gray-400">／ 目標：3,000字以上</span>
+            <span className="text-[#6B7280]">／ 目標：3,000字以上</span>
           </div>
         </div>
 
         {/* Preview - 7/10 width on desktop */}
         <div className={`flex flex-col ${previewExpanded ? 'hidden' : 'lg:w-[70%]'} ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
-          <div className="text-xs text-gray-500 mb-1 hidden lg:block">HTMLプレビュー</div>
-          <div className="p-4 sm:p-6 border border-gray-300 rounded-lg bg-white prose prose-gray max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h1:border-b prose-h1:border-gray-200 prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
-            <div className="not-prose mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+          <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">HTMLプレビュー</div>
+          <div className="p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
+            <div className="not-prose mb-4 px-3 py-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded text-xs text-[#6B7280]">
               ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
             </div>
             <ReactMarkdown
@@ -508,23 +508,19 @@ export default function ArticleEditor() {
 
           {/* SEO Keywords Section */}
           {seoKeywords.length > 0 && (
-            <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="mt-2 p-3 bg-white border border-[#E5E7EB] rounded-xl">
               <div className="flex items-center gap-1.5 mb-2">
-                <p className="text-xs font-medium text-gray-600">使用キーワード</p>
+                <p className="text-xs font-medium text-[#6B7280]">使用キーワード</p>
                 <Tooltip text="記事内で使用されているキーワードとその出現頻度です。密度2〜3%が理想的です。" />
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {seoKeywords.map((kw) => (
                   <span
                     key={kw.word}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${
-                      kw.density >= 2 && kw.density <= 3
-                        ? 'bg-green-50 border-green-200 text-green-700'
-                        : 'bg-gray-100 border-gray-200 text-gray-600'
-                    }`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-[#E5E7EB] bg-[#F3F4F6] text-[#374151]"
                   >
                     {kw.word}
-                    <span className="text-[10px] opacity-70">{kw.count}回 {kw.density}%</span>
+                    <span className="text-[10px] text-[#6B7280]">{kw.count}回 {kw.density}%</span>
                   </span>
                 ))}
               </div>
@@ -552,13 +548,13 @@ function buildMarkdownComponents(
 ) {
   return {
     h1: ({ children }: { children?: React.ReactNode }) => (
-      <h1 className="text-2xl font-bold border-b border-gray-200 pb-2 mb-4">{children}</h1>
+      <h1 className="text-2xl font-semibold border-b border-[#E5E7EB] pb-2 mb-4">{children}</h1>
     ),
     h2: ({ children }: { children?: React.ReactNode }) => (
-      <h2 className="text-xl font-bold mt-8 mb-3 text-gray-900">{children}</h2>
+      <h2 className="text-xl font-semibold mt-8 mb-3 text-[#111827]">{children}</h2>
     ),
     h3: ({ children }: { children?: React.ReactNode }) => (
-      <h3 className="text-lg font-semibold mt-6 mb-2 text-gray-800">{children}</h3>
+      <h3 className="text-lg font-semibold mt-6 mb-2 text-[#111827]">{children}</h3>
     ),
     p: ({ children }: { children?: React.ReactNode }) => {
       const text = String(children).trim();
@@ -575,13 +571,13 @@ function buildMarkdownComponents(
           return (
             <figure className="my-4 not-prose">
               <img src={dataUrl} alt={description} className="w-full rounded-lg object-cover max-h-[500px]" />
-              <figcaption className="text-center text-xs text-gray-400 mt-1">{description}</figcaption>
+              <figcaption className="text-center text-xs text-[#6B7280] mt-1">{description}</figcaption>
               {/* Regeneration button */}
               <div className="flex justify-center mt-2">
                 <button
                   onClick={() => onGenerateImage(fullTag)}
                   disabled={status === 'generating'}
-                  className="px-3 py-1 text-xs text-gray-500 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                  className="px-3 py-1 text-xs text-[#6B7280] border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] disabled:opacity-50 flex items-center gap-1 transition-colors"
                 >
                   {status === 'generating'
                     ? <><Spinner className="h-3 w-3" />{retry ? `リトライ中 ${retry.attempt}/${retry.max}` : '再生成中...'}</>
@@ -597,19 +593,19 @@ function buildMarkdownComponents(
         const isGenerating = status === 'generating';
 
         return (
-          <div className="my-3 border-2 border-dashed border-gray-200 rounded-lg p-3 bg-gray-50 not-prose space-y-2">
+          <div className="my-3 border border-dashed border-[#E5E7EB] rounded-xl p-3 bg-[#F9FAFB] not-prose space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-gray-300 text-lg flex-shrink-0">🖼</span>
-              <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5 truncate">
+              <span className="text-[#6B7280] text-base flex-shrink-0">&#x1f5bc;</span>
+              <span className="text-xs text-[#374151] bg-white border border-[#E5E7EB] rounded px-2 py-0.5 truncate">
                 {fullTag}
               </span>
             </div>
 
             {/* English prompt display */}
             {prompt && (
-              <div className="bg-white border border-gray-200 rounded p-2">
-                <p className="text-[10px] text-gray-400 mb-1">English Prompt:</p>
-                <p className="text-xs text-gray-600 leading-relaxed">{prompt}</p>
+              <div className="bg-white border border-[#E5E7EB] rounded-lg p-2">
+                <p className="text-[10px] text-[#6B7280] mb-1">English Prompt:</p>
+                <p className="text-xs text-[#374151] leading-relaxed">{prompt}</p>
               </div>
             )}
 
@@ -618,7 +614,7 @@ function buildMarkdownComponents(
               <button
                 onClick={() => onGenerateImage(fullTag)}
                 disabled={isGenerating}
-                className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
+                className="px-3 py-1.5 text-xs bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] disabled:opacity-50 flex items-center gap-1.5 transition-colors"
               >
                 {isGenerating
                   ? <><Spinner className="h-3 w-3" />{retry ? `リトライ中 ${retry.attempt}/${retry.max}` : '生成中...'}</>
@@ -628,7 +624,7 @@ function buildMarkdownComponents(
               {prompt && (
                 <button
                   onClick={() => onCopyPrompt(prompt)}
-                  className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                  className="px-3 py-1.5 text-xs border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-[#F3F4F6] transition-colors"
                 >
                   プロンプトをコピー
                 </button>
@@ -637,7 +633,7 @@ function buildMarkdownComponents(
                 <button
                   onClick={() => generatePromptsMutation.mutate({ articleId })}
                   disabled={generatePromptsMutation.isPending}
-                  className="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
+                  className="px-3 py-1.5 text-xs border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-[#F3F4F6] disabled:opacity-50 transition-colors"
                 >
                   {generatePromptsMutation.isPending ? 'プロンプト生成中...' : 'プロンプト生成'}
                 </button>
@@ -646,9 +642,9 @@ function buildMarkdownComponents(
 
             {/* Per-image error with retry exhausted */}
             {(status === 'failed' || error) && (
-              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              <div className="text-xs text-[#6B7280] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2 py-1.5">
                 {error || '画像生成に失敗しました。'}プロンプトをコピーして
-                <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="underline ml-0.5">AI Studio</a>
+                <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="underline text-[#2563EB] ml-0.5">AI Studio</a>
                 で生成してください。
               </div>
             )}

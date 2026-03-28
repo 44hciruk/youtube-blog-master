@@ -40,10 +40,10 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm border-b border-gray-200">
+    <div className="min-h-screen bg-[#F9FAFB] flex flex-col">
+      <header className="bg-white border-b border-[#E5E7EB]">
         <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-lg sm:text-xl font-bold text-gray-900 hover:text-gray-700">
+          <Link to="/" className="flex items-center gap-2 text-lg sm:text-xl font-semibold text-[#111827] hover:text-[#374151]">
             <img src="/logo.svg" alt="TubeBlogGenerator" className="h-6 sm:h-7 w-auto" />
             <span className="hidden sm:inline">TubeBlogGenerator</span>
             <span className="sm:hidden">TBG</span>
@@ -58,17 +58,17 @@ function App() {
                   to={item.path}
                   className={`text-sm font-medium transition-colors ${
                     location.pathname === item.path
-                      ? 'text-blue-600'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'text-[#2563EB]'
+                      : 'text-[#6B7280] hover:text-[#111827]'
                   }`}
                 >
                   {item.label}
                 </Link>
               ))}
             </nav>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="flex items-center gap-2 text-sm text-[#6B7280]">
               <span>{userName}</span>
-              <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-gray-600">
+              <button onClick={handleLogout} className="text-xs text-[#6B7280] hover:text-[#111827]">
                 ログアウト
               </button>
             </div>
@@ -76,7 +76,7 @@ function App() {
 
           {/* Mobile hamburger */}
           <button
-            className="md:hidden p-2 text-gray-600 hover:text-gray-900"
+            className="md:hidden p-2 text-[#6B7280] hover:text-[#111827]"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="メニュー"
           >
@@ -90,23 +90,23 @@ function App() {
 
         {/* Mobile menu dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white">
+          <div className="md:hidden border-t border-[#E5E7EB] bg-white">
             <nav className="flex flex-col px-4 py-2">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`py-3 text-sm font-medium border-b border-gray-100 ${
-                    location.pathname === item.path ? 'text-blue-600' : 'text-gray-600'
+                  className={`py-3 text-sm font-medium border-b border-[#E5E7EB] ${
+                    location.pathname === item.path ? 'text-[#2563EB]' : 'text-[#6B7280]'
                   }`}
                 >
                   {item.label}
                 </Link>
               ))}
-              <div className="py-3 flex items-center justify-between text-sm text-gray-500">
+              <div className="py-3 flex items-center justify-between text-sm text-[#6B7280]">
                 <span>{userName}</span>
-                <button onClick={handleLogout} className="text-xs text-red-500">ログアウト</button>
+                <button onClick={handleLogout} className="text-xs text-[#EF4444] hover:text-red-700">ログアウト</button>
               </div>
             </nav>
           </div>
@@ -120,8 +120,8 @@ function App() {
           <Route path="/editor/:id" element={<ArticleEditor />} />
         </Routes>
       </main>
-      <footer className="border-t border-gray-200 bg-white mt-auto">
-        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-gray-400">
+      <footer className="border-t border-[#E5E7EB] bg-white mt-auto">
+        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-[#6B7280]">
           &copy; 2026 TubeBlogGenerator &nbsp;|&nbsp; Created by Dr.SK &nbsp;|&nbsp; v{packageJson.version}
         </div>
       </footer>
