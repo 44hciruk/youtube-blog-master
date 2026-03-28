@@ -1,14 +1,79 @@
 import OpenAI from 'openai';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
-import YTDlpWrap from 'yt-dlp-wrap';
-
-const YT_DLP_PATH = process.env.YT_DLP_PATH || '/opt/homebrew/bin/yt-dlp';
 
 /**
- * Transcribe audio using OpenAI Whisper API.
- * Used as fallback when YouTube captions are not available.
+ * Download audio from YouTube using @distube/ytdl-core and transcribe with Whisper API.
+ * This is the primary fallback when YouTube captions are not available.
+ */
+export async function downloadAndTranscribe(
+  videoId: string,
+  apiKey: string,
+  language?: string,
+): Promise<{ transcript: string; language: string }> {
+  console.log(`[Whisper] 音声取得開始: ${videoId}`);
+
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+  // Dynamic import to avoid ESM/CJS bundling issues
+  const ytdl = await import('@distube/ytdl-core');
+  const downloadFn = ytdl.default || ytdl;
+
+  // Get audio-only stream
+  const audioStream = downloadFn(url, {
+    filter: 'audioonly',
+    quality: 'lowestaudio',
+  });
+
+  // Convert stream to Buffer
+  const chunks: Buffer[] = [];
+  for await (const chunk of audioStream) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const buffer = Buffer.concat(chunks);
+
+  if (buffer.length === 0) {
+    throw new Error('音声データの取得に失敗しました');
+  }
+
+  console.log(`[Whisper] 音声取得完了: ${(buffer.length / 1024 / 1024).toFixed(1)}MB`);
+
+  // Whisper API has a 25MB file size limit
+  if (buffer.length > 25 * 1024 * 1024) {
+    console.warn(`[Whisper] 音声ファイルが大きすぎます (${(buffer.length / 1024 / 1024).toFixed(1)}MB)。25MB制限を超えています。`);
+    throw new Error('動画が長すぎます。Whisper APIの25MB制限を超えています。');
+  }
+
+  // Send to Whisper API
+  const openai = new OpenAI({ apiKey });
+
+  const file = new File([new Uint8Array(buffer)], 'audio.webm', {
+    type: 'audio/webm',
+  });
+
+  console.log(`[Whisper] Whisper APIに送信中...`);
+
+  const response = await openai.audio.transcriptions.create({
+    file,
+    model: 'whisper-1',
+    language: language || 'ja',
+    response_format: 'verbose_json',
+  });
+
+  const transcript = response.text;
+  const detectedLang =
+    (response as unknown as Record<string, string>).language ||
+    language ||
+    'ja';
+
+  console.log(
+    `[Whisper] 文字起こし完了: ${transcript.length}文字 (lang=${detectedLang})`,
+  );
+
+  return { transcript, language: detectedLang };
+}
+
+/**
+ * Transcribe audio buffer directly with Whisper API.
+ * Kept for backward compatibility.
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
@@ -17,7 +82,9 @@ export async function transcribeAudio(
 ): Promise<{ transcript: string; language: string }> {
   const openai = new OpenAI({ apiKey });
 
-  const file = new File([new Uint8Array(audioBuffer)], 'audio.mp3', { type: 'audio/mpeg' });
+  const file = new File([new Uint8Array(audioBuffer)], 'audio.webm', {
+    type: 'audio/webm',
+  });
 
   const response = await openai.audio.transcriptions.create({
     file,
@@ -28,95 +95,9 @@ export async function transcribeAudio(
 
   return {
     transcript: response.text,
-    language: (response as unknown as Record<string, string>).language || language || 'ja',
+    language:
+      (response as unknown as Record<string, string>).language ||
+      language ||
+      'ja',
   };
-}
-
-/**
- * Download audio from YouTube video using yt-dlp, save as temp file,
- * transcribe with Whisper, then delete the temp file.
- */
-export async function downloadAndTranscribe(
-  videoId: string,
-  apiKey: string,
-  language?: string,
-): Promise<{ transcript: string; language: string }> {
-  const tmpDir = os.tmpdir();
-  const tmpFile = path.join(tmpDir, `ytbm_${videoId}_${Date.now()}`);
-  const audioFile = `${tmpFile}.webm`;
-
-  try {
-    // Download audio-only stream via yt-dlp
-    const ytDlp = new YTDlpWrap(YT_DLP_PATH);
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-    await ytDlp.execPromise([
-      videoUrl,
-      '--format', 'bestaudio[ext=webm]/bestaudio/best',
-      '--output', audioFile,
-      '--no-playlist',
-      '--quiet',
-    ]);
-
-    if (!fs.existsSync(audioFile)) {
-      throw new Error('音声ファイルのダウンロードに失敗しました');
-    }
-
-    const audioBuffer = fs.readFileSync(audioFile);
-    const openai = new OpenAI({ apiKey });
-
-    // Upload as a File object with webm mime type
-    const file = new File([new Uint8Array(audioBuffer)], 'audio.webm', { type: 'audio/webm' });
-
-    const response = await openai.audio.transcriptions.create({
-      file,
-      model: 'whisper-1',
-      language: language || undefined,
-      response_format: 'verbose_json',
-    });
-
-    return {
-      transcript: response.text,
-      language: (response as unknown as Record<string, string>).language || language || 'ja',
-    };
-  } finally {
-    // Always clean up temp file
-    if (fs.existsSync(audioFile)) {
-      fs.unlinkSync(audioFile);
-    }
-  }
-}
-
-/**
- * Legacy: Download audio buffer (kept for backward compatibility).
- * Now delegates to downloadAndTranscribe internally.
- */
-export async function downloadAudioFromYouTube(
-  videoId: string,
-): Promise<Buffer> {
-  const tmpDir = os.tmpdir();
-  const audioFile = path.join(tmpDir, `ytbm_${videoId}_${Date.now()}.webm`);
-
-  try {
-    const ytDlp = new YTDlpWrap(YT_DLP_PATH);
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-    await ytDlp.execPromise([
-      videoUrl,
-      '--format', 'bestaudio[ext=webm]/bestaudio/best',
-      '--output', audioFile,
-      '--no-playlist',
-      '--quiet',
-    ]);
-
-    if (!fs.existsSync(audioFile)) {
-      throw new Error('音声ファイルのダウンロードに失敗しました');
-    }
-
-    return fs.readFileSync(audioFile);
-  } finally {
-    if (fs.existsSync(audioFile)) {
-      fs.unlinkSync(audioFile);
-    }
-  }
 }
