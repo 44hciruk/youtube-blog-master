@@ -7,7 +7,7 @@ import { saveGenerationHistory } from '../helpers/generationHistory';
 import { getVideoId, getVideoMetadata, getVideoTranscript } from '../services/youtubeService';
 import { normalizeTranscript, extractKeywords, extractMainPoints } from '../services/textNormalization';
 import { generateArticle } from '../services/articleGenerationService';
-import { insertImageInstructions } from '../services/imageInstructionService';
+import { insertImageInstructions, insertImageInstructionsWithLLM } from '../services/imageInstructionService';
 import { generateImagesForArticle, generateImagePrompts, generateSingleImageForTag } from '../services/imageGenerationService';
 import { exportToMarkdown, exportToWordPress } from '../services/exportService';
 import { generateArticleSchema, updateArticleSchema } from '../utils/validation';
@@ -249,7 +249,7 @@ export const articleRouter = router({
       return checkDuplicateVideo(ctx.userId, videoId);
     }),
 
-  // Add image instructions to article
+  // Add image instructions to article (LLM-powered when API key available)
   addImageInstructions: protectedProcedure
     .input(z.object({ articleId: z.number() }))
     .mutation(async ({ ctx, input }) => {
@@ -258,7 +258,25 @@ export const articleRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: '記事が見つかりません' });
       }
 
-      const updatedMarkdown = insertImageInstructions(article.markdownContent);
+      let updatedMarkdown: string;
+      const openaiApiKey = await getDecryptedApiKey(ctx.userId, 'openai');
+
+      if (openaiApiKey) {
+        // Use LLM for contextual image descriptions
+        try {
+          updatedMarkdown = await insertImageInstructionsWithLLM(
+            article.markdownContent,
+            openaiApiKey,
+          );
+        } catch (err) {
+          console.warn('[imageInstructions] LLM failed, falling back to rule-based:', err instanceof Error ? err.message : err);
+          updatedMarkdown = insertImageInstructions(article.markdownContent);
+        }
+      } else {
+        // Fallback to rule-based insertion
+        updatedMarkdown = insertImageInstructions(article.markdownContent);
+      }
+
       await updateArticle(input.articleId, ctx.userId, {
         markdownContent: updatedMarkdown,
       });

@@ -368,6 +368,9 @@ export default function ArticleEditor() {
   // SEO keywords
   const seoKeywords = useMemo(() => extractKeywordsWithCount(markdown), [markdown]);
 
+  // Check if article has image tags
+  const hasImageTags = useMemo(() => /\[画像：.+?\]/.test(markdown), [markdown]);
+
   if (articleQuery.isLoading) {
     return <div className="text-center py-12 text-[#6B7280]">読み込み中...</div>;
   }
@@ -431,13 +434,24 @@ export default function ArticleEditor() {
             >
               画像指示追加
             </button>
-            <button
-              onClick={handleGenerateImages}
-              disabled={generateImagesMutation.isPending}
-              className="px-3 py-1.5 text-[13px] font-medium border border-[#2563EB] rounded-lg text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50 flex items-center gap-1 transition-colors"
-            >
-              {generateImagesMutation.isPending ? <><Spinner className="h-3 w-3" />生成中...</> : '全画像を生成'}
-            </button>
+            <div className="relative group">
+              <button
+                onClick={handleGenerateImages}
+                disabled={generateImagesMutation.isPending || !hasImageTags}
+                className={`px-3 py-1.5 text-[13px] font-medium rounded-lg flex items-center gap-1 transition-colors ${
+                  hasImageTags
+                    ? 'border border-[#2563EB] text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50'
+                    : 'border border-[#E5E7EB] text-[#6B7280] bg-[#F3F4F6] cursor-not-allowed opacity-50'
+                }`}
+              >
+                {generateImagesMutation.isPending ? <><Spinner className="h-3 w-3" />生成中...</> : '全画像を生成'}
+              </button>
+              {!hasImageTags && (
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-20 whitespace-nowrap px-2 py-1 text-[11px] text-white bg-[#374151] rounded-md">
+                  先に画像指示を追加してください
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex gap-1.5 sm:gap-2">
             <button
