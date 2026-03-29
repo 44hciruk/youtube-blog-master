@@ -76,6 +76,7 @@ export const updateArticleSchema = z.object({
   markdownContent: z.string().optional(),
   content: z.string().optional(),
   status: z.enum(['draft', 'completed']).optional(),
+  metaDescription: z.string().optional(),
 });
 
 export const templateSchema = z.object({

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -31,6 +31,12 @@ const TONE_LABELS: Record<string, string> = {
   casual: 'カジュアル',
   polite: '丁寧語',
   professional: '専門的',
+};
+
+const TONE_BADGE_STYLES: Record<string, string> = {
+  casual: 'bg-[#FEF3C7] text-[#92400E]',
+  polite: 'bg-[#DBEAFE] text-[#1E40AF]',
+  professional: 'bg-[#F3E8FF] text-[#6B21A8]',
 };
 
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
@@ -200,17 +206,27 @@ export default function ArticleEditor() {
     { enabled: !!articleId },
   );
 
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [autoSaveLabel, setAutoSaveLabel] = useState<'idle' | 'saved' | 'failed'>('idle');
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<{ title: string; markdown: string; metaDescription: string } | null>(null);
 
   const updateMutation = trpc.article.update.useMutation({
     onSuccess: () => {
-      setSaveState('saved');
-      setTimeout(() => setSaveState('idle'), 2000);
+      pendingSaveRef.current = null;
+      setAutoSaveLabel('saved');
+      setTimeout(() => setAutoSaveLabel('idle'), 2000);
     },
     onError: (err) => {
-      setSaveState('failed');
-      showToast(err.message, 'error');
-      setTimeout(() => setSaveState('idle'), 2000);
+      setAutoSaveLabel('failed');
+      console.warn('[AutoSave] failed:', err.message);
+      // Retry after 5 seconds
+      retryTimerRef.current = setTimeout(() => {
+        if (pendingSaveRef.current) {
+          const { title: t, markdown: md, metaDescription: meta } = pendingSaveRef.current;
+          updateMutation.mutate({ articleId, title: t, markdownContent: md, metaDescription: meta, status: 'draft' });
+        }
+      }, 5000);
     },
   });
 
@@ -306,22 +322,33 @@ export default function ArticleEditor() {
     }
   };
 
-  const handleSave = useCallback(() => {
-    setSaveState('saving');
-    updateMutation.mutate({ articleId, title, markdownContent: markdown, status: 'draft' });
-  }, [articleId, title, markdown, updateMutation]);
-
-  // Ctrl+S / Cmd+S shortcut
+  // Auto-save debounce: 3 seconds after last edit
+  const isInitialLoadRef = useRef(true);
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleSave();
-      }
+    // Skip auto-save on initial data load
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+    if (!articleId || !markdown) return;
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      pendingSaveRef.current = { title, markdown, metaDescription };
+      updateMutation.mutate({ articleId, title, markdownContent: markdown, metaDescription, status: 'draft' });
+    }, 3000);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [handleSave]);
+  }, [markdown, metaDescription, title]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup retry timer on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, []);
 
   const [htmlCopied, setHtmlCopied] = useState(false);
 
@@ -452,27 +479,19 @@ export default function ArticleEditor() {
             onChange={(e) => setTitle(e.target.value)}
             className="text-base sm:text-xl font-semibold text-[#111827] border-none outline-none bg-transparent min-w-0 flex-1"
           />
-          <button
-            onClick={handleSave}
-            disabled={saveState === 'saving'}
-            className={`px-4 py-2 text-sm rounded-lg flex-shrink-0 font-medium flex items-center gap-1.5 transition-colors ${
-              saveState === 'saved' ? 'bg-[#16A34A] text-white' :
-              saveState === 'failed' ? 'bg-[#EF4444] text-white' :
-              'bg-[#2563EB] text-white hover:bg-[#1D4ED8] disabled:opacity-50'
-            }`}
-          >
-            {saveState === 'saving' ? <><Spinner className="h-3.5 w-3.5" />保存中...</> :
-             saveState === 'saved' ? '✓ 保存済み' :
-             saveState === 'failed' ? '保存失敗' :
-             '保存'}
-          </button>
+          {autoSaveLabel === 'saved' && (
+            <span className="text-xs text-[#6B7280] flex-shrink-0">保存済み ✓</span>
+          )}
+          {autoSaveLabel === 'failed' && (
+            <span className="text-xs text-[#EF4444] flex-shrink-0">保存に失敗しました</span>
+          )}
         </div>
 
         {/* Source Video URL + Tone badge */}
         {(sourceVideoUrl || articleTone) && (
           <div className="flex items-center gap-1.5 -mt-1 min-w-0 overflow-hidden whitespace-nowrap">
             {articleTone && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#F3F4F6] text-[#6B7280] border border-[#E5E7EB] flex-shrink-0">
+              <span className={`text-[11px] px-2 py-0.5 rounded flex-shrink-0 ${TONE_BADGE_STYLES[articleTone] || 'bg-[#F3F4F6] text-[#6B7280]'}`}>
                 {TONE_LABELS[articleTone] || articleTone}
               </span>
             )}
@@ -497,10 +516,15 @@ export default function ArticleEditor() {
         )}
 
         {/* Meta Description */}
-        {metaDescription && (
+        {metaDescription !== undefined && (
           <div className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2">
             <p className="text-xs text-[#6B7280] mb-0.5">メタディスクリプション</p>
-            <p className="text-sm text-[#374151] leading-relaxed">{metaDescription}</p>
+            <textarea
+              value={metaDescription}
+              onChange={(e) => setMetaDescription(e.target.value)}
+              className="w-full text-sm text-[#374151] leading-relaxed border-none outline-none resize-none bg-transparent"
+              rows={2}
+            />
             <div className="flex items-center justify-end gap-2 mt-1">
               <span className={`text-xs font-mono ${
                 metaDescription.length < 120 ? 'text-[#DC2626]' :
@@ -518,48 +542,53 @@ export default function ArticleEditor() {
         )}
 
         {/* Toolbar row */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-1 sm:gap-1.5">
+        <div className="flex items-center flex-wrap gap-1 sm:gap-1.5">
+          <button
+            onClick={() => imageInstructionsMutation.mutate({ articleId })}
+            disabled={imageInstructionsMutation.isPending || hasImageTags}
+            className={`px-3.5 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
+              !hasImageTags
+                ? 'border border-[#E5E7EB] text-[#374151] bg-white hover:bg-[#F3F4F6] disabled:opacity-50'
+                : 'border border-[#E5E7EB] text-[#9CA3AF] bg-[#F3F4F6] cursor-not-allowed'
+            }`}
+          >
+            画像タグを挿入
+          </button>
+          <svg className="w-4 h-4 text-[#9CA3AF] flex-shrink-0 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          <div className="relative group">
             <button
-              onClick={() => imageInstructionsMutation.mutate({ articleId })}
-              disabled={imageInstructionsMutation.isPending || hasImageTags}
-              className={`px-3.5 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
-                !hasImageTags
-                  ? 'border border-[#E5E7EB] text-[#374151] bg-white hover:bg-[#F3F4F6] disabled:opacity-50'
+              onClick={handleGenerateImages}
+              disabled={isBulkGenerating || !hasImageTags}
+              className={`px-3.5 py-1.5 text-[13px] font-medium rounded-md flex items-center gap-1 transition-colors ${
+                hasImageTags
+                  ? 'border border-[#2563EB] text-[#2563EB] bg-white hover:bg-[#EFF6FF] disabled:opacity-50'
                   : 'border border-[#E5E7EB] text-[#9CA3AF] bg-[#F3F4F6] cursor-not-allowed'
               }`}
             >
-              画像タグを挿入
+              {isBulkGenerating
+                ? <><Spinner className="h-3 w-3" />生成中... {bulkImageProgress ? `${bulkImageProgress.current}/${bulkImageProgress.total}枚` : ''}</>
+                : '全画像を生成'
+              }
             </button>
-            <svg className="w-4 h-4 text-[#9CA3AF] flex-shrink-0 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            <div className="relative group">
-              <button
-                onClick={handleGenerateImages}
-                disabled={isBulkGenerating || !hasImageTags}
-                className={`px-3.5 py-1.5 text-[13px] font-medium rounded-md flex items-center gap-1 transition-colors ${
-                  hasImageTags
-                    ? 'border border-[#2563EB] text-[#2563EB] bg-white hover:bg-[#EFF6FF] disabled:opacity-50'
-                    : 'border border-[#E5E7EB] text-[#9CA3AF] bg-[#F3F4F6] cursor-not-allowed'
-                }`}
-              >
-                {isBulkGenerating
-                  ? <><Spinner className="h-3 w-3" />生成中... {bulkImageProgress ? `${bulkImageProgress.current}/${bulkImageProgress.total}枚` : ''}</>
-                  : '全画像を生成'
-                }
-              </button>
-              {!hasImageTags && (
-                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-20 whitespace-nowrap px-2 py-1 text-[11px] text-white bg-[#374151] rounded-md">
-                  先に画像タグを挿入してください
-                </div>
-              )}
-            </div>
+            {!hasImageTags && (
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-20 whitespace-nowrap px-2 py-1 text-[11px] text-white bg-[#374151] rounded-md">
+                先に画像タグを挿入してください
+              </div>
+            )}
           </div>
+          <svg className="w-4 h-4 text-[#9CA3AF] flex-shrink-0 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
           <button
             onClick={handleDownloadImages}
             disabled={images.length === 0}
-            className="px-3.5 py-1.5 text-[13px] border border-[#E5E7EB] rounded-md text-[#374151] bg-white hover:bg-[#F3F4F6] disabled:text-[#9CA3AF] disabled:bg-[#F3F4F6] disabled:cursor-not-allowed transition-colors"
+            className={`px-3.5 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
+              images.length > 0
+                ? 'border border-[#E5E7EB] text-[#374151] bg-white hover:bg-[#F3F4F6]'
+                : 'border border-[#E5E7EB] text-[#9CA3AF] bg-[#F3F4F6] cursor-not-allowed'
+            }`}
           >
             画像DL
           </button>

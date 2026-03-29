@@ -15,6 +15,12 @@ const TONE_LABELS: Record<string, string> = {
   professional: '専門的',
 };
 
+const TONE_BADGE_STYLES: Record<string, string> = {
+  casual: 'bg-[#FEF3C7] text-[#92400E]',
+  polite: 'bg-[#DBEAFE] text-[#1E40AF]',
+  professional: 'bg-[#F3E8FF] text-[#6B21A8]',
+};
+
 function formatDateTime(date: Date | string): string {
   const d = new Date(date);
   const y = d.getFullYear();
@@ -67,7 +73,7 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
                       {article.title}
                     </button>
                     {article.tone && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F4F6] text-[#6B7280] border border-[#E5E7EB] flex-shrink-0">
+                      <span className={`text-[11px] px-2 py-0.5 rounded flex-shrink-0 ${TONE_BADGE_STYLES[article.tone] || 'bg-[#F3F4F6] text-[#6B7280]'}`}>
                         {TONE_LABELS[article.tone] || article.tone}
                       </span>
                     )}
