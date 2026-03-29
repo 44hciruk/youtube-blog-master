@@ -193,9 +193,18 @@ export default function ArticleEditor() {
     { enabled: !!articleId },
   );
 
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+
   const updateMutation = trpc.article.update.useMutation({
-    onSuccess: () => showToast('保存しました', 'success'),
-    onError: (err) => showToast(err.message, 'error'),
+    onSuccess: () => {
+      setSaveState('saved');
+      setTimeout(() => setSaveState('idle'), 2000);
+    },
+    onError: (err) => {
+      setSaveState('failed');
+      showToast(err.message, 'error');
+      setTimeout(() => setSaveState('idle'), 2000);
+    },
   });
 
   const imageInstructionsMutation = trpc.article.addImageInstructions.useMutation({
@@ -290,8 +299,21 @@ export default function ArticleEditor() {
   };
 
   const handleSave = useCallback(() => {
+    setSaveState('saving');
     updateMutation.mutate({ articleId, title, markdownContent: markdown, status: 'draft' });
   }, [articleId, title, markdown, updateMutation]);
+
+  // Ctrl+S / Cmd+S shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleSave]);
 
   const [htmlCopied, setHtmlCopied] = useState(false);
 
@@ -424,21 +446,28 @@ export default function ArticleEditor() {
           />
           <button
             onClick={handleSave}
-            disabled={updateMutation.isPending}
-            className="px-4 py-2 text-sm bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] disabled:opacity-50 flex-shrink-0 font-medium"
+            disabled={saveState === 'saving'}
+            className={`px-4 py-2 text-sm rounded-lg flex-shrink-0 font-medium flex items-center gap-1.5 transition-colors ${
+              saveState === 'saved' ? 'bg-[#16A34A] text-white' :
+              saveState === 'failed' ? 'bg-[#EF4444] text-white' :
+              'bg-[#2563EB] text-white hover:bg-[#1D4ED8] disabled:opacity-50'
+            }`}
           >
-            保存
+            {saveState === 'saving' ? <><Spinner className="h-3.5 w-3.5" />保存中...</> :
+             saveState === 'saved' ? '✓ 保存済み' :
+             saveState === 'failed' ? '保存失敗' :
+             '保存'}
           </button>
         </div>
 
         {/* Source Video URL */}
         {sourceVideoUrl && (
-          <div className="flex items-center gap-1.5 -mt-1">
-            <svg className="w-3.5 h-3.5 text-[#6B7280] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <div className="flex items-center gap-1.5 -mt-1 min-w-0 overflow-hidden whitespace-nowrap">
+            <svg className="w-3 h-3 text-[#6B7280] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
               <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
               <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white"/>
             </svg>
-            <span className="text-xs text-[#6B7280]">元動画：</span>
+            <span className="text-xs text-[#6B7280] flex-shrink-0">元動画：</span>
             <a
               href={sourceVideoUrl}
               target="_blank"
@@ -453,42 +482,49 @@ export default function ArticleEditor() {
         {/* Meta Description */}
         {metaDescription && (
           <div className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-[#6B7280] mb-0.5">メタディスクリプション</p>
-                <p className="text-sm text-[#374151] leading-relaxed">{metaDescription}</p>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs font-mono text-[#6B7280]">
-                  {metaDescription.length}字
-                  <span className="text-[10px] ml-1">（推奨: 120〜160字）</span>
-                </span>
-                <button onClick={handleCopyMeta} className="px-2 py-1 text-xs border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6]">
-                  コピー
-                </button>
-              </div>
+            <p className="text-xs text-[#6B7280] mb-0.5">メタディスクリプション</p>
+            <p className="text-sm text-[#374151] leading-relaxed">{metaDescription}</p>
+            <div className="flex items-center justify-end gap-2 mt-1">
+              <span className={`text-xs font-mono ${
+                metaDescription.length < 120 ? 'text-[#DC2626]' :
+                metaDescription.length <= 160 ? 'text-[#16A34A]' :
+                'text-[#D97706]'
+              }`}>
+                {metaDescription.length}字
+              </span>
+              <span className="text-[11px] text-[#9CA3AF]">（推奨: 120〜160字）</span>
+              <button onClick={handleCopyMeta} className="px-2 py-1 text-xs border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6]">
+                コピー
+              </button>
             </div>
           </div>
         )}
 
         {/* Toolbar row */}
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             <button
               onClick={() => imageInstructionsMutation.mutate({ articleId })}
-              disabled={imageInstructionsMutation.isPending}
-              className="px-3 py-1.5 text-[13px] font-medium border border-[#E5E7EB] rounded-lg text-[#374151] bg-white hover:bg-[#F3F4F6] disabled:opacity-50 transition-colors"
+              disabled={imageInstructionsMutation.isPending || hasImageTags}
+              className={`px-3.5 py-1.5 text-[13px] font-medium rounded-md transition-colors ${
+                !hasImageTags
+                  ? 'border border-[#E5E7EB] text-[#374151] bg-white hover:bg-[#F3F4F6] disabled:opacity-50'
+                  : 'border border-[#E5E7EB] text-[#9CA3AF] bg-[#F3F4F6] cursor-not-allowed'
+              }`}
             >
               画像タグを挿入
             </button>
+            <svg className="w-4 h-4 text-[#9CA3AF] flex-shrink-0 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
             <div className="relative group">
               <button
                 onClick={handleGenerateImages}
                 disabled={isBulkGenerating || !hasImageTags}
-                className={`px-3 py-1.5 text-[13px] font-medium rounded-lg flex items-center gap-1 transition-colors ${
+                className={`px-3.5 py-1.5 text-[13px] font-medium rounded-md flex items-center gap-1 transition-colors ${
                   hasImageTags
                     ? 'border border-[#2563EB] text-[#2563EB] bg-white hover:bg-[#EFF6FF] disabled:opacity-50'
-                    : 'border border-[#E5E7EB] text-[#6B7280] bg-[#F3F4F6] cursor-not-allowed opacity-50'
+                    : 'border border-[#E5E7EB] text-[#9CA3AF] bg-[#F3F4F6] cursor-not-allowed'
                 }`}
               >
                 {isBulkGenerating
@@ -498,25 +534,23 @@ export default function ArticleEditor() {
               </button>
               {!hasImageTags && (
                 <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-20 whitespace-nowrap px-2 py-1 text-[11px] text-white bg-[#374151] rounded-md">
-                  先に画像指示を追加してください
+                  先に画像タグを挿入してください
                 </div>
               )}
             </div>
           </div>
-          <div className="flex gap-1.5 sm:gap-2">
-            <button
-              onClick={handleDownloadImages}
-              disabled={images.length === 0}
-              className="px-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              画像DL
-            </button>
-          </div>
+          <button
+            onClick={handleDownloadImages}
+            disabled={images.length === 0}
+            className="px-3.5 py-1.5 text-[13px] border border-[#E5E7EB] rounded-md text-[#374151] bg-white hover:bg-[#F3F4F6] disabled:text-[#9CA3AF] disabled:bg-[#F3F4F6] disabled:cursor-not-allowed transition-colors"
+          >
+            画像DL
+          </button>
         </div>
 
         {/* Mobile tab switcher */}
         <div className="lg:hidden flex items-center">
-          <div className="flex rounded-lg border border-[#E5E7EB] overflow-hidden">
+          <div className="flex rounded-md border border-[#E5E7EB] overflow-hidden">
             <button
               onClick={() => setMobileTab('edit')}
               className={`px-4 py-1.5 text-xs font-medium transition-colors ${mobileTab === 'edit' ? 'bg-[#2563EB] text-white' : 'bg-white text-[#6B7280]'}`}
@@ -535,9 +569,9 @@ export default function ArticleEditor() {
 
       {/* Editor and Preview - 3:7 ratio on desktop */}
       <div className="lg:flex lg:gap-4">
-        {/* Markdown Editor - 3/10 width on desktop */}
-        <div className={`flex flex-col lg:w-[30%] lg:min-w-[280px] ${mobileTab !== 'edit' ? 'hidden lg:flex' : ''}`}>
-          <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">Markdownエディタ</div>
+        {/* Markdown Editor - 4/10 width on desktop */}
+        <div className={`flex flex-col lg:w-[40%] lg:min-w-[280px] ${mobileTab !== 'edit' ? 'hidden lg:flex' : ''}`}>
+          <div className="text-xs text-[#9CA3AF] mb-1 hidden lg:block">Markdownエディタ</div>
           <textarea
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
@@ -555,9 +589,9 @@ export default function ArticleEditor() {
           </div>
         </div>
 
-        {/* Preview - 7/10 width on desktop */}
-        <div className={`flex flex-col lg:w-[70%] ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
-          <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">HTMLプレビュー</div>
+        {/* Preview - 6/10 width on desktop */}
+        <div className={`flex flex-col lg:w-[60%] ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
+          <div className="text-xs text-[#9CA3AF] mb-1 hidden lg:block">HTMLプレビュー</div>
           <div className="relative p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
             {/* Floating copy icon */}
             <div className="not-prose sticky top-2 float-right z-10 group/copy">
@@ -607,7 +641,7 @@ export default function ArticleEditor() {
                       }`}
                     >
                       {kw.word}
-                      <span className={`text-[10px] ${isSeoEffective ? 'text-[#166534] opacity-70' : 'text-[#6B7280]'}`}>
+                      <span className={`text-[11px] ${isSeoEffective ? 'text-[#166534] opacity-70' : 'text-[#6B7280]'}`}>
                         {kw.count}回 {kw.density}%
                       </span>
                     </span>
@@ -662,12 +696,11 @@ function buildMarkdownComponents(
             <figure className="my-4 not-prose">
               <img src={dataUrl} alt={description} className="w-full rounded-lg object-cover max-h-[500px]" />
               <figcaption className="text-center text-xs text-[#6B7280] mt-1">{description}</figcaption>
-              {/* Regeneration button */}
               <div className="flex justify-center mt-2">
                 <button
                   onClick={() => onGenerateImage(fullTag)}
                   disabled={status === 'generating'}
-                  className="px-3 py-1 text-xs text-[#6B7280] border border-[#E5E7EB] rounded-lg hover:bg-[#F3F4F6] disabled:opacity-50 flex items-center gap-1 transition-colors"
+                  className="px-2.5 py-1 text-xs text-[#6B7280] hover:bg-[#F3F4F6] disabled:opacity-50 flex items-center gap-1 rounded transition-colors"
                 >
                   {status === 'generating'
                     ? <><Spinner className="h-3 w-3" />{retry ? `リトライ中 ${retry.attempt}/${retry.max}` : '再生成中...'}</>
@@ -683,12 +716,10 @@ function buildMarkdownComponents(
         const isGenerating = status === 'generating';
 
         return (
-          <div className="my-3 border border-dashed border-[#E5E7EB] rounded-xl p-3 bg-[#F9FAFB] not-prose space-y-2">
-            <div className="flex items-center gap-2">
+          <div className="my-3 border border-dashed border-[#D1D5DB] rounded-lg p-3 bg-[#FAFAFA] not-prose space-y-2">
+            <div className="flex items-center gap-2 min-w-0">
               <span className="text-[#6B7280] text-base flex-shrink-0">&#x1f5bc;</span>
-              <span className="text-xs text-[#374151] bg-white border border-[#E5E7EB] rounded px-2 py-0.5 truncate">
-                {fullTag}
-              </span>
+              <span className="text-[13px] text-[#6B7280] truncate">{description}</span>
             </div>
 
             {/* English prompt display */}
@@ -704,7 +735,7 @@ function buildMarkdownComponents(
               <button
                 onClick={() => onGenerateImage(fullTag)}
                 disabled={isGenerating}
-                className="px-3 py-1 text-[13px] bg-white border border-[#2563EB] text-[#2563EB] rounded-lg hover:bg-[#EFF6FF] disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                className="px-2.5 py-1 text-xs bg-white border border-[#2563EB] text-[#2563EB] rounded-md hover:bg-[#EFF6FF] disabled:opacity-50 flex items-center gap-1.5 transition-colors"
               >
                 {isGenerating
                   ? <><Spinner className="h-3 w-3" />{retry ? `リトライ中 ${retry.attempt}/${retry.max}` : '生成中...'}</>
@@ -714,7 +745,7 @@ function buildMarkdownComponents(
               {prompt && (
                 <button
                   onClick={() => onCopyPrompt(prompt)}
-                  className="px-3 py-1.5 text-xs border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+                  className="px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] rounded-md transition-colors"
                 >
                   プロンプトをコピー
                 </button>
@@ -723,7 +754,7 @@ function buildMarkdownComponents(
                 <button
                   onClick={() => generatePromptsMutation.mutate({ articleId })}
                   disabled={generatePromptsMutation.isPending}
-                  className="px-3 py-1.5 text-xs border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-[#F3F4F6] disabled:opacity-50 transition-colors"
+                  className="px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] rounded-md disabled:opacity-50 transition-colors"
                 >
                   {generatePromptsMutation.isPending ? 'プロンプト生成中...' : 'プロンプトをコピー'}
                 </button>

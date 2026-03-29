@@ -132,19 +132,19 @@ export default function Dashboard() {
 
       {/* URL Input Section - compact */}
       <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
-        <h2 className="text-sm font-semibold text-[#111827] mb-3">新しい記事を生成</h2>
+        <div className="flex items-center gap-1.5 mb-3">
+          <h2 className="text-sm font-semibold text-[#111827]">新しい記事を生成</h2>
+          <Tooltip text="YouTubeの動画URLを貼り付けてください。通常動画・ショート両対応です。" />
+        </div>
         <div className="flex flex-col sm:flex-row gap-2">
-          <div className="flex-1 flex items-center gap-2">
-            <input
-              type="url"
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
-              className="flex-1 px-3 py-2 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] outline-none text-[#111827] text-sm"
-              onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-            />
-            <Tooltip text="YouTubeの動画URLを貼り付けてください。通常動画・ショート両対応です。" />
-          </div>
+          <input
+            type="url"
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=..."
+            className="flex-1 px-3 py-2 border border-[#E5E7EB] rounded-lg focus:ring-2 focus:ring-[#2563EB] focus:border-[#2563EB] outline-none text-[#111827] text-sm"
+            onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+          />
           <select
             value={tone}
             onChange={(e) => setTone(e.target.value as ToneOption)}
