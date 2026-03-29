@@ -7,6 +7,7 @@ import { saveGenerationHistory } from '../helpers/generationHistory';
 import { getVideoId, getVideoMetadata, getVideoTranscript } from '../services/youtubeService';
 import { normalizeTranscript, extractKeywords, extractMainPoints } from '../services/textNormalization';
 import { generateArticle } from '../services/articleGenerationService';
+import { regenerateMetaDescription } from '../services/llmService';
 import { insertImageInstructions, insertImageInstructionsWithLLM } from '../services/imageInstructionService';
 import { generateImagesForArticle, generateImagePrompts, generateSingleImageForTag } from '../services/imageGenerationService';
 import { exportToMarkdown, exportToWordPress } from '../services/exportService';
@@ -160,6 +161,28 @@ export const articleRouter = router({
           costEstimate: '0.05',
           articleId,
         });
+
+        // Regenerate meta description with dedicated prompt for better quality
+        try {
+          const betterMeta = await regenerateMetaDescription(
+            generated.markdownContent,
+            input.tone,
+            openaiApiKey,
+          );
+          if (betterMeta && betterMeta.length >= 100) {
+            await updateArticle(articleId, ctx.userId, { metaDescription: betterMeta });
+          }
+          // Log meta description regeneration usage
+          await logUsage({
+            userId: ctx.userId,
+            type: 'llm',
+            model: 'gpt-4o',
+            costEstimate: '0.01',
+            articleId,
+          });
+        } catch (metaErr) {
+          console.warn('[Article] Meta description regeneration failed, keeping original:', metaErr instanceof Error ? metaErr.message : metaErr);
+        }
 
         setProgress(progressKey, 'completed', '完了');
         // Clear after a brief delay so frontend can read 'completed'

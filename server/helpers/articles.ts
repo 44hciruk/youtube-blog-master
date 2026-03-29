@@ -24,6 +24,7 @@ interface UpdateArticleData {
   wordCount?: number;
   status?: 'draft' | 'completed';
   images?: { tag: string; base64: string }[];
+  metaDescription?: string;
 }
 
 export async function createArticle(data: CreateArticleData) {

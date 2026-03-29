@@ -27,6 +27,10 @@ export default function Dashboard() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [tone, setTone] = useState<ToneOption>('polite');
   const [showDeleteModal, setShowDeleteModal] = useState<number | null>(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState<{
+    existingArticleId: number;
+    existingArticleTitle: string;
+  } | null>(null);
   const navigate = useNavigate();
   const { showToast, ToastContainer } = useToast();
 
@@ -60,11 +64,36 @@ export default function Dashboard() {
     },
   });
 
-  const handleGenerate = () => {
+  const checkDuplicateMutation = trpc.article.checkDuplicate.useQuery(
+    { videoUrl: videoUrl.trim() },
+    { enabled: false },
+  );
+
+  const handleGenerate = async () => {
     if (!videoUrl.trim()) {
       showToast('YouTube URLを入力してください', 'error');
       return;
     }
+
+    // Check for duplicate video
+    try {
+      const result = await checkDuplicateMutation.refetch();
+      const dupData = result.data as { isDuplicate: boolean; existingArticleId?: number; existingArticleTitle?: string } | undefined;
+      if (dupData?.isDuplicate && dupData.existingArticleId && dupData.existingArticleTitle) {
+        setShowDuplicateModal({
+          existingArticleId: dupData.existingArticleId,
+          existingArticleTitle: dupData.existingArticleTitle,
+        });
+        return;
+      }
+    } catch {
+      // If check fails, proceed with generation
+    }
+
+    proceedToGenerate();
+  };
+
+  const proceedToGenerate = () => {
     const params = new URLSearchParams({ url: videoUrl });
     if (manualTranscript.trim()) {
       params.set('transcript', manualTranscript.trim());
@@ -172,7 +201,6 @@ export default function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
             字幕テキストを手動入力する（任意）
-            <Tooltip text="字幕があると記事の精度が上がります。YouTubeの文字起こし機能からコピーして貼り付けてください。" />
           </button>
           {showManualTranscript && (
             <div className="mt-2 space-y-2">
@@ -273,6 +301,43 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      {/* Duplicate Video Confirmation Modal */}
+      {showDuplicateModal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg p-6 max-w-sm w-full mx-4">
+            <h3 className="text-base font-semibold text-[#111827] mb-2">同じ動画の記事が存在します</h3>
+            <p className="text-sm text-[#6B7280] mb-1">この動画からすでに記事が生成されています：</p>
+            <p className="text-sm text-[#111827] font-medium mb-5 truncate">{showDuplicateModal.existingArticleTitle}</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  navigate(`/editor/${showDuplicateModal.existingArticleId}`);
+                  setShowDuplicateModal(null);
+                }}
+                className="w-full px-4 py-2 text-sm border border-[#2563EB] text-[#2563EB] rounded-lg hover:bg-[#EFF6FF] transition-colors"
+              >
+                既存記事を開く
+              </button>
+              <button
+                onClick={() => {
+                  setShowDuplicateModal(null);
+                  proceedToGenerate();
+                }}
+                className="w-full px-4 py-2 text-sm border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-[#F3F4F6] transition-colors"
+              >
+                新規生成する
+              </button>
+              <button
+                onClick={() => setShowDuplicateModal(null)}
+                className="w-full px-4 py-2 text-sm text-[#6B7280] hover:text-[#111827] transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal !== null && (

@@ -384,4 +384,106 @@ ${ANTI_HALLUCINATION_RULE}`,
   return JSON.parse(content).qaSection;
 }
 
+/**
+ * Regenerate meta description with strict character count enforcement.
+ * Retries up to maxRetries times if result is under 120 chars.
+ */
+export async function regenerateMetaDescription(
+  articleContent: string,
+  tone: string,
+  apiKey: string,
+  maxRetries = 2,
+): Promise<string> {
+  const openai = getOpenAIClient(apiKey);
+
+  const toneLabels: Record<string, string> = {
+    casual: 'カジュアルな口調',
+    polite: '丁寧語（です・ます調）',
+    professional: '専門的・である調',
+  };
+  const toneLabel = toneLabels[tone] || toneLabels.polite;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `あなたはSEOメタディスクリプション生成の専門家です。
+
+【絶対厳守ルール】
+- メタディスクリプションは必ず120〜160文字（日本語文字数）で生成すること
+- 120文字未満は絶対に不可。必ず120文字以上にすること
+- 160文字を超えてはならない
+- 検索結果に表示される要約文として、記事の核心的な価値を伝えること
+- ${toneLabel}で統一すること
+- 「動画」「YouTube」「チャンネル」への言及は禁止
+
+【品質基準】
+- 読者が検索結果でクリックしたくなる文章にすること
+- 記事の主要なベネフィットを含めること
+- 具体的な情報（数字、方法名など）を含めること`,
+        },
+        {
+          role: 'user',
+          content: `以下の記事内容に基づいて、120〜160文字のメタディスクリプションを生成してください。
+
+記事内容（冒頭部分）：
+${articleContent.substring(0, 2000)}`,
+        },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'meta_description',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              metaDescription: {
+                type: 'string',
+                description: '120〜160文字のメタディスクリプション。120文字未満は不可。',
+              },
+            },
+            required: ['metaDescription'],
+            additionalProperties: false,
+          },
+        },
+      },
+      temperature: 0.7,
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) throw new Error('LLM response was empty');
+
+    const result = JSON.parse(content).metaDescription as string;
+
+    // Check character count — if >= 120, accept it
+    if (result.length >= 120) {
+      return result;
+    }
+
+    console.log(`[MetaDescription] Attempt ${attempt + 1}: ${result.length} chars (< 120), retrying...`);
+  }
+
+  // If all retries fail, return the last result anyway
+  const lastResponse = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'system',
+        content: `メタディスクリプションを正確に140文字で生成してください。${toneLabel}で。`,
+      },
+      {
+        role: 'user',
+        content: `記事内容：\n${articleContent.substring(0, 1500)}`,
+      },
+    ],
+    temperature: 0.8,
+    max_tokens: 300,
+  });
+
+  return lastResponse.choices[0].message.content?.trim() || '';
+}
+
 export type { TransformResult, HistoricalBackground, SceneGuide, QAItem, DecorationStrength };
