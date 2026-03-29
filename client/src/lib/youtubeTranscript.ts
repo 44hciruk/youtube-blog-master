@@ -1,10 +1,8 @@
 /**
  * Fetch YouTube transcript via Cloudflare Worker.
  * All transcript fetching is done through the Worker to avoid CORS issues.
+ * No direct YouTube API calls are made from the browser.
  */
-
-const TRANSCRIPT_WORKER_URL = import.meta.env.VITE_TRANSCRIPT_WORKER_URL || '';
-const TRANSCRIPT_AUTH_TOKEN = import.meta.env.VITE_TRANSCRIPT_AUTH_TOKEN || '';
 
 /** Max transcript length (chars) — trim to avoid excessive token usage */
 const MAX_TRANSCRIPT_LENGTH = 30000;
@@ -44,50 +42,62 @@ export function extractVideoId(url: string): string | null {
 export async function fetchTranscriptViaWorker(
   videoId: string,
 ): Promise<{ text: string | null; error?: string }> {
-  if (!TRANSCRIPT_WORKER_URL) {
-    console.warn('[Transcript] Worker URL not configured (VITE_TRANSCRIPT_WORKER_URL is empty)');
+  // Read env vars at call time (not module load time) to ensure Vite has injected them
+  const workerUrl = import.meta.env.VITE_TRANSCRIPT_WORKER_URL || '';
+  const authToken = import.meta.env.VITE_TRANSCRIPT_AUTH_TOKEN || 'tbg-secret-2026';
+
+  if (!workerUrl) {
+    console.error('[Transcript] VITE_TRANSCRIPT_WORKER_URL is not set');
     return { text: null, error: 'Worker URL not configured' };
   }
 
-  const fetchUrl = `${TRANSCRIPT_WORKER_URL}?videoId=${videoId}`;
+  // Build URL — ensure no trailing slash before query params
+  const cleanUrl = workerUrl.replace(/\/+$/, '');
+  const fetchUrl = `${cleanUrl}?videoId=${videoId}`;
 
-  console.log('[Transcript] Fetching transcript from:', fetchUrl);
-  console.log('[Transcript] Auth token present:', !!TRANSCRIPT_AUTH_TOKEN);
+  console.log('[Transcript] === Fetch Start ===');
+  console.log('[Transcript] Full URL:', fetchUrl);
+  console.log('[Transcript] Auth token:', authToken ? `${authToken.substring(0, 4)}...` : '(empty)');
 
   try {
     const response = await fetch(fetchUrl, {
       method: 'GET',
       headers: {
-        'X-App-Auth': TRANSCRIPT_AUTH_TOKEN,
+        'X-App-Auth': authToken,
       },
     });
 
     console.log('[Transcript] Response status:', response.status, 'ok:', response.ok);
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.warn(`[Transcript] Worker returned ${response.status}:`, errorText);
-      return { text: null, error: `Worker error: ${response.status}` };
+      const errorBody = await response.text().catch(() => '(could not read body)');
+      console.error('[Transcript] Worker error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorBody,
+      });
+      return { text: null, error: `Worker error: ${response.status} - ${errorBody}` };
     }
 
     const data = await response.json() as { text?: string; error?: string };
 
-    console.log('[Transcript] Response data - text present:', !!data.text, 'text length:', data.text?.length ?? 0, 'error:', data.error ?? 'none');
+    console.log('[Transcript] Parsed response - text:', !!data.text, 'length:', data.text?.length ?? 0, 'error:', data.error ?? 'none');
 
     if (data.error) {
-      console.warn('[Transcript] Worker returned error:', data.error);
+      console.warn('[Transcript] Worker returned error field:', data.error);
       return { text: null, error: data.error };
     }
 
     if (data.text && data.text.length > 0) {
       const trimmed = trimTranscript(data.text);
-      console.log(`[Transcript] Success: ${trimmed.length} chars (trimmed from ${data.text.length})`);
+      console.log(`[Transcript] Success: ${trimmed.length} chars`);
       return { text: trimmed };
     }
 
+    console.warn('[Transcript] Worker returned empty text');
     return { text: null, error: 'Empty transcript' };
   } catch (e) {
-    console.error('[Transcript] Worker fetch failed:', e);
+    console.error('[Transcript] Network/fetch error:', e);
     return { text: null, error: e instanceof Error ? e.message : 'Fetch failed' };
   }
 }
