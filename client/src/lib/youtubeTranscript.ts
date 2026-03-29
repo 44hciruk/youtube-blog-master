@@ -1,8 +1,65 @@
 /**
- * Fetch YouTube transcript directly from the browser.
- * Because this runs in the user's browser (not a server), YouTube treats it
- * as a normal user request and does not trigger bot detection.
+ * Fetch YouTube transcript via Cloudflare Worker or directly from the browser.
  */
+
+const TRANSCRIPT_WORKER_URL = import.meta.env.VITE_TRANSCRIPT_WORKER_URL || '';
+const TRANSCRIPT_AUTH_TOKEN = import.meta.env.VITE_TRANSCRIPT_AUTH_TOKEN || '';
+
+/** Max transcript length (chars) — trim to avoid excessive token usage */
+const MAX_TRANSCRIPT_LENGTH = 30000;
+
+/**
+ * Trim transcript to max length with graceful suffix
+ */
+function trimTranscript(text: string): string {
+  if (text.length <= MAX_TRANSCRIPT_LENGTH) return text;
+  return text.substring(0, MAX_TRANSCRIPT_LENGTH) + '...（以下略）';
+}
+
+/**
+ * Fetch transcript via Cloudflare Worker proxy.
+ * Returns the transcript text or null if unavailable.
+ */
+export async function fetchTranscriptViaWorker(
+  videoId: string,
+): Promise<{ text: string | null; error?: string }> {
+  if (!TRANSCRIPT_WORKER_URL) {
+    return { text: null, error: 'Worker URL not configured' };
+  }
+
+  try {
+    console.log(`[Transcript] Fetching via Cloudflare Worker for ${videoId}`);
+    const response = await fetch(
+      `${TRANSCRIPT_WORKER_URL}?videoId=${videoId}`,
+      {
+        headers: { 'X-App-Auth': TRANSCRIPT_AUTH_TOKEN },
+      },
+    );
+
+    if (!response.ok) {
+      console.warn(`[Transcript] Worker returned ${response.status}`);
+      return { text: null, error: `Worker error: ${response.status}` };
+    }
+
+    const data = await response.json() as { text?: string; error?: string };
+
+    if (data.error) {
+      console.warn(`[Transcript] Worker error:`, data.error);
+      return { text: null, error: data.error };
+    }
+
+    if (data.text && data.text.length > 0) {
+      const trimmed = trimTranscript(data.text);
+      console.log(`[Transcript] Worker success: ${trimmed.length} chars`);
+      return { text: trimmed };
+    }
+
+    return { text: null, error: 'Empty transcript' };
+  } catch (e) {
+    console.warn('[Transcript] Worker fetch failed:', e);
+    return { text: null, error: e instanceof Error ? e.message : 'Fetch failed' };
+  }
+}
 
 /**
  * Extract video ID from various YouTube URL formats
