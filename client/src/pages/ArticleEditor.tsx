@@ -477,7 +477,7 @@ export default function ArticleEditor() {
             <button
               onClick={() => imageInstructionsMutation.mutate({ articleId })}
               disabled={imageInstructionsMutation.isPending}
-              className="px-3 py-1.5 text-[13px] font-medium border border-[#2563EB] rounded-lg text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50 transition-colors"
+              className="px-3 py-1.5 text-[13px] font-medium border border-[#E5E7EB] rounded-lg text-[#374151] bg-white hover:bg-[#F3F4F6] disabled:opacity-50 transition-colors"
             >
               画像タグを挿入
             </button>
@@ -487,7 +487,7 @@ export default function ArticleEditor() {
                 disabled={isBulkGenerating || !hasImageTags}
                 className={`px-3 py-1.5 text-[13px] font-medium rounded-lg flex items-center gap-1 transition-colors ${
                   hasImageTags
-                    ? 'border border-[#2563EB] text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50'
+                    ? 'border border-[#2563EB] text-[#2563EB] bg-white hover:bg-[#EFF6FF] disabled:opacity-50'
                     : 'border border-[#E5E7EB] text-[#6B7280] bg-[#F3F4F6] cursor-not-allowed opacity-50'
                 }`}
               >
@@ -560,10 +560,10 @@ export default function ArticleEditor() {
           <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">HTMLプレビュー</div>
           <div className="relative p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
             {/* Floating copy icon */}
+            <div className="not-prose sticky top-2 float-right z-10 group/copy">
             <button
               onClick={handleCopyHtml}
-              className="not-prose sticky top-2 float-right z-10 w-8 h-8 flex items-center justify-center bg-white border border-[#E5E7EB] rounded-md shadow-sm hover:bg-[#F3F4F6] transition-colors"
-              title="HTMLをコピー"
+              className="w-8 h-8 flex items-center justify-center bg-white border border-[#E5E7EB] rounded-md shadow-sm hover:bg-[#F3F4F6] transition-colors"
             >
               {htmlCopied ? (
                 <svg className="w-4 h-4 text-[#22C55E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -575,6 +575,10 @@ export default function ArticleEditor() {
                 </svg>
               )}
             </button>
+            <div className="absolute right-0 top-full mt-1 hidden group-hover/copy:block whitespace-nowrap px-2 py-1 text-[11px] text-white bg-[#374151] rounded-md">
+              {htmlCopied ? 'コピーしました' : 'コピー'}
+            </div>
+            </div>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={buildMarkdownComponents(imageMap, promptMap, imageStatuses, imageErrors, retryInfo, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
@@ -700,7 +704,7 @@ function buildMarkdownComponents(
               <button
                 onClick={() => onGenerateImage(fullTag)}
                 disabled={isGenerating}
-                className="px-3 py-1.5 text-xs bg-[#2563EB] text-white rounded-lg hover:bg-[#1D4ED8] disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                className="px-3 py-1 text-[13px] bg-white border border-[#2563EB] text-[#2563EB] rounded-lg hover:bg-[#EFF6FF] disabled:opacity-50 flex items-center gap-1.5 transition-colors"
               >
                 {isGenerating
                   ? <><Spinner className="h-3 w-3" />{retry ? `リトライ中 ${retry.attempt}/${retry.max}` : '生成中...'}</>

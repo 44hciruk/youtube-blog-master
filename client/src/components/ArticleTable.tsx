@@ -140,12 +140,6 @@ function ActionButtons({
   return (
     <div className="flex items-center gap-1 flex-wrap">
       <button
-        onClick={() => onEdit(article.id)}
-        className="px-2 py-1 text-xs font-medium text-[#2563EB] bg-[#EFF6FF] border border-[#2563EB] rounded hover:bg-[#DBEAFE] transition-colors"
-      >
-        編集
-      </button>
-      <button
         onClick={() => onExport(article.id, 'markdown')}
         className="px-2 py-1 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded transition-colors"
       >
@@ -159,7 +153,7 @@ function ActionButtons({
       </button>
       <button
         onClick={() => onDelete(article.id)}
-        className="px-2 py-1 text-xs text-[#EF4444] hover:bg-red-50 rounded transition-colors ml-auto"
+        className="px-2 py-1 text-[13px] text-[#EF4444] bg-transparent border-none hover:underline transition-colors ml-auto"
       >
         削除
       </button>

@@ -154,7 +154,7 @@ function App() {
           </div>
         )}
       </header>
-      <main className="max-w-7xl mx-auto px-4 py-4 sm:py-8 flex-1 w-full">
+      <main className="max-w-7xl mx-auto px-4 py-3 sm:py-5 flex-1 w-full">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/settings" element={<ApiSettings />} />

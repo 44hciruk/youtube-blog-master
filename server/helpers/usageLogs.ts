@@ -1,4 +1,4 @@
-import { eq, and, gte, sql, desc } from 'drizzle-orm';
+import { eq, and, gte, sql, desc, inArray } from 'drizzle-orm';
 import { db, schema } from '../db';
 
 interface LogUsageData {
@@ -147,6 +147,15 @@ async function getEstimatedUsageSummary(userId: number, daysBack: number): Promi
 }
 
 export async function getUsageSummary(userId: number, daysBack = 30): Promise<UsageSummary> {
+  try {
+    return await getUsageSummaryFromLogs(userId, daysBack);
+  } catch (err) {
+    console.warn('[usageLogs] Failed to get usage from logs, falling back to estimation:', err instanceof Error ? err.message : err);
+    return getEstimatedUsageSummary(userId, daysBack);
+  }
+}
+
+async function getUsageSummaryFromLogs(userId: number, daysBack: number): Promise<UsageSummary> {
   // Check if the usageLogs table exists
   const tableExists = await usageLogsTableExists();
   if (!tableExists) {
@@ -225,7 +234,7 @@ export async function getUsageSummary(userId: number, daysBack = 30): Promise<Us
       .where(
         and(
           eq(schema.articles.userId, userId),
-          sql`${schema.articles.id} = ANY(${articleIds})`,
+          inArray(schema.articles.id, articleIds),
         ),
       );
     for (const a of articles) articleTitles.set(a.id, a.title);

@@ -127,11 +127,11 @@ export default function Dashboard() {
     .slice(0, 10);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <ToastContainer />
 
       {/* URL Input Section - compact */}
-      <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+      <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
         <h2 className="text-sm font-semibold text-[#111827] mb-3">新しい記事を生成</h2>
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1 flex items-center gap-2">
@@ -145,6 +145,15 @@ export default function Dashboard() {
             />
             <Tooltip text="YouTubeの動画URLを貼り付けてください。通常動画・ショート両対応です。" />
           </div>
+          <select
+            value={tone}
+            onChange={(e) => setTone(e.target.value as ToneOption)}
+            className="text-sm px-2 py-2 border border-[#E5E7EB] rounded-lg bg-white text-[#374151] w-[120px] flex-shrink-0"
+          >
+            <option value="casual">カジュアル</option>
+            <option value="polite">丁寧語</option>
+            <option value="professional">専門的</option>
+          </select>
           <button
             onClick={handleGenerate}
             className="px-4 py-2 bg-[#2563EB] text-white rounded-lg font-medium text-sm hover:bg-[#1D4ED8] transition-colors whitespace-nowrap"
@@ -181,24 +190,11 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Tone Selector */}
-        <div className="flex items-center gap-2 mt-2">
-          <span className="text-xs text-[#6B7280]">トーン：</span>
-          <select
-            value={tone}
-            onChange={(e) => setTone(e.target.value as ToneOption)}
-            className="text-xs px-2 py-1 border border-[#E5E7EB] rounded-lg bg-white text-[#374151]"
-          >
-            <option value="casual">カジュアル</option>
-            <option value="polite">丁寧語</option>
-            <option value="professional">専門的</option>
-          </select>
-        </div>
       </div>
 
       {/* Progress Display */}
       {isGenerating && (
-        <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+        <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
           <h3 className="text-sm font-semibold text-[#111827] mb-3">生成進捗</h3>
           <div className="space-y-2.5">
             {STEP_ORDER.map((step, idx) => {
@@ -243,7 +239,7 @@ export default function Dashboard() {
       <CostDashboard />
 
       {/* Articles List */}
-      <div className="bg-white rounded-xl border border-[#E5E7EB] p-4 sm:p-6">
+      <div className="bg-white rounded-xl border border-[#E5E7EB] p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-[#111827]">過去に生成した記事</h2>
           <select
