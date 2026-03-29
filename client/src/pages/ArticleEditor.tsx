@@ -174,12 +174,14 @@ export default function ArticleEditor() {
 
   const [markdown, setMarkdown] = useState('');
   const [title, setTitle] = useState('');
+  const [sourceVideoUrl, setSourceVideoUrl] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [images, setImages] = useState<SavedImage[]>([]);
   const [imagePrompts, setImagePrompts] = useState<ImagePromptData[]>([]);
   const [imageStatuses, setImageStatuses] = useState<Map<string, ImageStatus>>(new Map());
   const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
   const [retryInfo, setRetryInfo] = useState<Map<string, { attempt: number; max: number }>>(new Map());
+  const [bulkImageProgress, setBulkImageProgress] = useState<{ current: number; total: number } | null>(null);
   // Mobile: tab switch; Desktop: side-by-side or expanded
   const [mobileTab, setMobileTab] = useState<'edit' | 'preview'>('edit');
 
@@ -204,19 +206,7 @@ export default function ArticleEditor() {
     onError: (err) => showToast(err.message, 'error'),
   });
 
-  const generateImagesMutation = trpc.article.generateImages.useMutation({
-    onSuccess: (data) => {
-      const imgs = data.images as SavedImage[];
-      setImages(imgs);
-      setImageStatuses((prev) => {
-        const next = new Map(prev);
-        for (const img of imgs) next.set(img.tag, 'completed');
-        return next;
-      });
-      showToast(`${data.count}枚の画像を生成しました`, 'success');
-    },
-    onError: (err) => showToast(err.message, 'error'),
-  });
+  const [isBulkGenerating, setIsBulkGenerating] = useState(false);
 
   const generatePromptsMutation = trpc.article.generateImagePrompts.useMutation({
     onSuccess: (data) => {
@@ -232,6 +222,7 @@ export default function ArticleEditor() {
     if (articleQuery.data) {
       setMarkdown(articleQuery.data.markdownContent);
       setTitle(articleQuery.data.title);
+      setSourceVideoUrl((articleQuery.data as Record<string, unknown>).sourceVideoUrl as string || '');
       setMetaDescription((articleQuery.data as Record<string, unknown>).metaDescription as string || '');
       setImages((articleQuery.data.images as SavedImage[] | null) ?? []);
     }
@@ -342,8 +333,45 @@ export default function ArticleEditor() {
     }
   };
 
-  const handleGenerateImages = () => {
-    generateImagesMutation.mutate({ articleId });
+  const handleGenerateImages = async () => {
+    // Extract all image tags from markdown
+    const tagMatches = markdown.match(/\[画像：.+?\]/g);
+    if (!tagMatches || tagMatches.length === 0) return;
+
+    setIsBulkGenerating(true);
+    setBulkImageProgress({ current: 0, total: tagMatches.length });
+
+    let successCount = 0;
+    for (let i = 0; i < tagMatches.length; i++) {
+      const tag = tagMatches[i];
+      // Skip already generated images
+      if (images.some((img) => img.tag === tag)) {
+        successCount++;
+        setBulkImageProgress({ current: i + 1, total: tagMatches.length });
+        continue;
+      }
+
+      setImageStatuses((prev) => new Map(prev).set(tag, 'generating'));
+
+      try {
+        const result = await generateSingleImageMutation.mutateAsync({ articleId, tag });
+        setImages((prev) => {
+          const filtered = prev.filter((img) => img.tag !== tag);
+          return [...filtered, result.image as SavedImage];
+        });
+        setImageStatuses((prev) => new Map(prev).set(tag, 'completed'));
+        successCount++;
+      } catch (err) {
+        setImageStatuses((prev) => new Map(prev).set(tag, 'failed'));
+        const msg = err instanceof Error ? err.message : '画像生成に失敗しました';
+        setImageErrors((prev) => new Map(prev).set(tag, msg));
+      }
+      setBulkImageProgress({ current: i + 1, total: tagMatches.length });
+    }
+
+    setIsBulkGenerating(false);
+    setBulkImageProgress(null);
+    showToast(`${successCount}/${tagMatches.length}枚の画像を生成しました`, 'success');
   };
 
   const handleCopyMeta = async () => {
@@ -403,6 +431,24 @@ export default function ArticleEditor() {
           </button>
         </div>
 
+        {/* Source Video URL */}
+        {sourceVideoUrl && (
+          <div className="flex items-center gap-1.5 -mt-1">
+            <svg className="w-3.5 h-3.5 text-[#6B7280] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
+              <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white"/>
+            </svg>
+            <a
+              href={sourceVideoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-[#6B7280] hover:text-[#2563EB] hover:underline truncate"
+            >
+              {sourceVideoUrl}
+            </a>
+          </div>
+        )}
+
         {/* Meta Description */}
         {metaDescription && (
           <div className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2">
@@ -432,19 +478,22 @@ export default function ArticleEditor() {
               disabled={imageInstructionsMutation.isPending}
               className="px-3 py-1.5 text-[13px] font-medium border border-[#2563EB] rounded-lg text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50 transition-colors"
             >
-              画像指示追加
+              画像タグを挿入
             </button>
             <div className="relative group">
               <button
                 onClick={handleGenerateImages}
-                disabled={generateImagesMutation.isPending || !hasImageTags}
+                disabled={isBulkGenerating || !hasImageTags}
                 className={`px-3 py-1.5 text-[13px] font-medium rounded-lg flex items-center gap-1 transition-colors ${
                   hasImageTags
                     ? 'border border-[#2563EB] text-[#2563EB] bg-[#EFF6FF] hover:bg-[#DBEAFE] disabled:opacity-50'
                     : 'border border-[#E5E7EB] text-[#6B7280] bg-[#F3F4F6] cursor-not-allowed opacity-50'
                 }`}
               >
-                {generateImagesMutation.isPending ? <><Spinner className="h-3 w-3" />生成中...</> : '全画像を生成'}
+                {isBulkGenerating
+                  ? <><Spinner className="h-3 w-3" />生成中... {bulkImageProgress ? `${bulkImageProgress.current}/${bulkImageProgress.total}枚` : ''}</>
+                  : '全画像を生成'
+                }
               </button>
               {!hasImageTags && (
                 <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block z-20 whitespace-nowrap px-2 py-1 text-[11px] text-white bg-[#374151] rounded-md">
@@ -517,15 +566,22 @@ export default function ArticleEditor() {
             </button>
           </div>
           <div className="p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
-            <div className="not-prose mb-4 px-3 py-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded text-xs text-[#6B7280]">
-              ※ AI生成コンテンツです。公開前に内容・数字・固有名詞を必ずご確認ください
-            </div>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={buildMarkdownComponents(imageMap, promptMap, imageStatuses, imageErrors, retryInfo, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
             >
               {markdown}
             </ReactMarkdown>
+          </div>
+
+          {/* Bottom HTML copy button */}
+          <div className="mt-2 flex justify-end">
+            <button
+              onClick={handleCopyHtml}
+              className="text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] px-2 py-1 rounded border border-[#E5E7EB] transition-colors"
+            >
+              {htmlCopied ? 'コピーしました' : 'HTMLをコピー'}
+            </button>
           </div>
 
           {/* SEO Keywords Section */}
@@ -666,7 +722,7 @@ function buildMarkdownComponents(
                   disabled={generatePromptsMutation.isPending}
                   className="px-3 py-1.5 text-xs border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-[#F3F4F6] disabled:opacity-50 transition-colors"
                 >
-                  {generatePromptsMutation.isPending ? 'プロンプト生成中...' : 'プロンプト生成'}
+                  {generatePromptsMutation.isPending ? 'プロンプト生成中...' : 'プロンプトをコピー'}
                 </button>
               )}
             </div>

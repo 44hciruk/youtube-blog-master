@@ -46,7 +46,7 @@ export const saveApiKeysSchema = z.object({
   ),
 });
 
-export const toneSchema = z.enum(['professional_assertive', 'friendly_advisor']);
+export const toneSchema = z.enum(['casual', 'polite', 'professional']);
 
 export const decorationStrengthSchema = z.object({
   history: z.enum(['weak', 'medium', 'strong']),
@@ -58,7 +58,7 @@ export const articleLengthSchema = z.enum(['standard', 'long']);
 
 export const generateArticleSchema = z.object({
   videoUrl: youtubeUrlSchema,
-  tone: toneSchema.default('professional_assertive'),
+  tone: toneSchema.default('polite'),
   decorationStrength: decorationStrengthSchema.default({
     history: 'medium',
     qa: 'medium',
@@ -80,7 +80,7 @@ export const updateArticleSchema = z.object({
 
 export const templateSchema = z.object({
   name: z.string().min(1).max(100),
-  tone: toneSchema.optional(),
+  tone: z.enum(['casual', 'polite', 'professional']).optional(),
   decorationStrength: decorationStrengthSchema.optional(),
   articleLength: articleLengthSchema.optional(),
   seoKeywords: z.array(z.string()).optional(),

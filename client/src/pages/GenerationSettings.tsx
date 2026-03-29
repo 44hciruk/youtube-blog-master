@@ -14,6 +14,7 @@ export default function GenerationSettings() {
   const [searchParams] = useSearchParams();
   const videoUrl = searchParams.get('url') || '';
   const manualTranscript = searchParams.get('transcript') || '';
+  const toneParam = searchParams.get('tone') || 'polite';
   const navigate = useNavigate();
   const { showToast, ToastContainer } = useToast();
 
@@ -76,6 +77,7 @@ export default function GenerationSettings() {
 
     generateMutation.mutate({
       videoUrl,
+      tone: toneParam as 'casual' | 'polite' | 'professional',
       articleLength,
       seoKeywords,
       transcript: transcript || undefined,

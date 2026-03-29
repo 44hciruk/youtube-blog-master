@@ -109,10 +109,12 @@ export async function transformToUserVoice(
 ): Promise<TransformResult> {
   const openai = getOpenAIClient(apiKey);
 
-  const toneInstruction =
-    tone === 'professional_assertive'
-      ? 'より強い表現、確信を持った断定的な言い方で。プロフェッショナルな権威を持って語る。'
-      : '柔らかい表現、読者への寄り添いを感じさせる親しみやすいアドバイザーとして語る。';
+  const toneInstructions: Record<string, string> = {
+    casual: 'カジュアルでフレンドリーな話し言葉。「〜だよ」「〜じゃん」「マジで」など親しみやすい表現を使う。友人に語りかけるような軽いトーン。',
+    polite: '丁寧語ベースで、読者への寄り添いを感じさせる親しみやすいアドバイザーとして語る。「〜です」「〜ますよね」のような柔らかい表現。',
+    professional: 'より強い表現、確信を持った断定的な言い方で。プロフェッショナルな権威を持って語る。専門家としての信頼感を重視。',
+  };
+  const toneInstruction = toneInstructions[tone] || toneInstructions.polite;
 
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
@@ -126,7 +128,7 @@ export async function transformToUserVoice(
 2. 知識そのものだけを抽出
 3. 筆者が直接読者に語りかけるスタイルに変換（一人称で、断定的に）
 4. ${toneInstruction}
-5. 120〜160文字のメタディスクリプション（検索結果に表示される要約文）を生成。検索結果で途切れず、かつ記事の内容が十分伝わる長さにすること
+5. 【絶対厳守】メタディスクリプションは必ず120〜160文字の範囲で生成すること。120文字未満や160文字超過は不可。検索結果に表示される要約文として、記事の内容が十分伝わる長さにすること
 
 【重要：冒頭重複の防止】
 - coreKnowledgeには詳細な解説本文のみを含めること
@@ -163,7 +165,7 @@ ${transcript}`,
             },
             metaDescription: {
               type: 'string',
-              description: '120〜160文字のメタディスクリプション。検索結果に表示される要約文。検索結果で途切れない長さにすること。',
+              description: '【絶対厳守】120〜160文字のメタディスクリプション。120文字未満・160文字超過は不可。検索結果に表示される要約文。',
             },
           },
           required: ['coreKnowledge', 'keyInsights', 'metaDescription'],

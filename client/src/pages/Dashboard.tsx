@@ -18,12 +18,15 @@ const STEP_LABELS: Record<string, string> = {
 const STEP_ORDER = ['fetching_video', 'fetching_transcript', 'generating_article', 'saving_article'];
 
 type SortOrder = 'newest' | 'oldest';
+type ToneOption = 'casual' | 'polite' | 'professional';
 
 export default function Dashboard() {
   const [videoUrl, setVideoUrl] = useState('');
   const [manualTranscript, setManualTranscript] = useState('');
   const [showManualTranscript, setShowManualTranscript] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [tone, setTone] = useState<ToneOption>('polite');
+  const [showDeleteModal, setShowDeleteModal] = useState<number | null>(null);
   const navigate = useNavigate();
   const { showToast, ToastContainer } = useToast();
 
@@ -66,6 +69,7 @@ export default function Dashboard() {
     if (manualTranscript.trim()) {
       params.set('transcript', manualTranscript.trim());
     }
+    params.set('tone', tone);
     navigate(`/generate?${params.toString()}`);
   };
 
@@ -74,8 +78,13 @@ export default function Dashboard() {
   };
 
   const handleDelete = (articleId: number) => {
-    if (window.confirm('この記事を削除しますか？')) {
-      deleteMutation.mutate({ articleId });
+    setShowDeleteModal(articleId);
+  };
+
+  const confirmDelete = () => {
+    if (showDeleteModal !== null) {
+      deleteMutation.mutate({ articleId: showDeleteModal });
+      setShowDeleteModal(null);
     }
   };
 
@@ -107,14 +116,15 @@ export default function Dashboard() {
 
   const currentStep = progressQuery.data?.step || 'idle';
 
-  // Sort articles
+  // Sort articles and limit to 10
   const allArticles = articlesQuery.data?.articles || [];
   const filteredArticles = allArticles
     .sort((a, b) => {
       const dateA = a.generatedAt ? new Date(a.generatedAt).getTime() : 0;
       const dateB = b.generatedAt ? new Date(b.generatedAt).getTime() : 0;
       return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
-    });
+    })
+    .slice(0, 10);
 
   return (
     <div className="space-y-5">
@@ -169,6 +179,20 @@ export default function Dashboard() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Tone Selector */}
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-xs text-[#6B7280]">トーン：</span>
+          <select
+            value={tone}
+            onChange={(e) => setTone(e.target.value as ToneOption)}
+            className="text-xs px-2 py-1 border border-[#E5E7EB] rounded-lg bg-white text-[#374151]"
+          >
+            <option value="casual">カジュアル</option>
+            <option value="polite">丁寧語</option>
+            <option value="professional">専門的</option>
+          </select>
         </div>
       </div>
 
@@ -238,14 +262,45 @@ export default function Dashboard() {
             エラー: {articlesQuery.error.message}
           </div>
         ) : (
-          <ArticleTable
-            articles={filteredArticles}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onExport={handleExport}
-          />
+          <>
+            <ArticleTable
+              articles={filteredArticles}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onExport={handleExport}
+            />
+            {allArticles.length > 10 && (
+              <p className="text-xs text-[#6B7280] mt-2 text-center">
+                最新10件を表示中（全{allArticles.length}件）
+              </p>
+            )}
+          </>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg p-6 max-w-sm w-full mx-4">
+            <h3 className="text-base font-semibold text-[#111827] mb-2">記事の削除</h3>
+            <p className="text-sm text-[#6B7280] mb-5">この記事を削除しますか？元に戻せません。</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowDeleteModal(null)}
+                className="px-4 py-2 text-sm border border-[#E5E7EB] rounded-lg text-[#374151] hover:bg-[#F3F4F6] transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm bg-[#EF4444] text-white rounded-lg hover:bg-[#DC2626] transition-colors"
+              >
+                削除する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
