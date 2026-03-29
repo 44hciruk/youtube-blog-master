@@ -16,7 +16,12 @@ export function CostDashboard() {
   }
 
   if (usageQuery.error) {
-    return null;
+    return (
+      <div className="bg-white rounded-xl border border-[#E5E7EB] p-4">
+        <h2 className="text-sm font-semibold text-[#111827] mb-2">コスト概算</h2>
+        <p className="text-sm text-[#6B7280] text-center py-4">コスト情報を取得できませんでした</p>
+      </div>
+    );
   }
 
   const data = usageQuery.data;

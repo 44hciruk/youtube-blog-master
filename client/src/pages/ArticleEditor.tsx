@@ -300,7 +300,7 @@ export default function ArticleEditor() {
       const html = markdownToWordPressHtml(markdown, imageMap, metaDescription);
       await navigator.clipboard.writeText(html);
       setHtmlCopied(true);
-      setTimeout(() => setHtmlCopied(false), 2000);
+      setTimeout(() => setHtmlCopied(false), 1500);
     } catch {
       showToast('コピーに失敗しました', 'error');
     }
@@ -438,6 +438,7 @@ export default function ArticleEditor() {
               <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
               <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white"/>
             </svg>
+            <span className="text-xs text-[#6B7280]">元動画：</span>
             <a
               href={sourceVideoUrl}
               target="_blank"
@@ -556,32 +557,30 @@ export default function ArticleEditor() {
 
         {/* Preview - 7/10 width on desktop */}
         <div className={`flex flex-col lg:w-[70%] ${mobileTab !== 'preview' ? 'hidden lg:flex' : ''}`}>
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-xs text-[#6B7280] hidden lg:block">HTMLプレビュー</div>
+          <div className="text-xs text-[#6B7280] mb-1 hidden lg:block">HTMLプレビュー</div>
+          <div className="relative p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
+            {/* Floating copy icon */}
             <button
               onClick={handleCopyHtml}
-              className="text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] px-2 py-0.5 rounded transition-colors"
+              className="not-prose sticky top-2 float-right z-10 w-8 h-8 flex items-center justify-center bg-white border border-[#E5E7EB] rounded-md shadow-sm hover:bg-[#F3F4F6] transition-colors"
+              title="HTMLをコピー"
             >
-              {htmlCopied ? 'コピーしました' : 'HTMLをコピー'}
+              {htmlCopied ? (
+                <svg className="w-4 h-4 text-[#22C55E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-[#6B7280]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+              )}
             </button>
-          </div>
-          <div className="p-4 sm:p-6 border border-[#E5E7EB] rounded-xl bg-white prose prose-gray max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h1:border-b prose-h1:border-[#E5E7EB] prose-h1:pb-2 prose-h1:mb-4 prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2 prose-p:leading-relaxed prose-li:my-0.5">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={buildMarkdownComponents(imageMap, promptMap, imageStatuses, imageErrors, retryInfo, handleGenerateSingleImage, handleCopyPrompt, generatePromptsMutation, articleId)}
             >
               {markdown}
             </ReactMarkdown>
-          </div>
-
-          {/* Bottom HTML copy button */}
-          <div className="mt-2 flex justify-end">
-            <button
-              onClick={handleCopyHtml}
-              className="text-xs text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] px-2 py-1 rounded border border-[#E5E7EB] transition-colors"
-            >
-              {htmlCopied ? 'コピーしました' : 'HTMLをコピー'}
-            </button>
           </div>
 
           {/* SEO Keywords Section */}
