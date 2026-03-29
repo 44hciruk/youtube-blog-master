@@ -1,5 +1,6 @@
 /**
- * Fetch YouTube transcript via Cloudflare Worker or directly from the browser.
+ * Fetch YouTube transcript via Cloudflare Worker.
+ * All transcript fetching is done through the Worker to avoid CORS issues.
  */
 
 const TRANSCRIPT_WORKER_URL = import.meta.env.VITE_TRANSCRIPT_WORKER_URL || '';
@@ -14,51 +15,6 @@ const MAX_TRANSCRIPT_LENGTH = 30000;
 function trimTranscript(text: string): string {
   if (text.length <= MAX_TRANSCRIPT_LENGTH) return text;
   return text.substring(0, MAX_TRANSCRIPT_LENGTH) + '...（以下略）';
-}
-
-/**
- * Fetch transcript via Cloudflare Worker proxy.
- * Returns the transcript text or null if unavailable.
- */
-export async function fetchTranscriptViaWorker(
-  videoId: string,
-): Promise<{ text: string | null; error?: string }> {
-  if (!TRANSCRIPT_WORKER_URL) {
-    return { text: null, error: 'Worker URL not configured' };
-  }
-
-  try {
-    console.log(`[Transcript] Fetching via Cloudflare Worker for ${videoId}`);
-    const response = await fetch(
-      `${TRANSCRIPT_WORKER_URL}?videoId=${videoId}`,
-      {
-        headers: { 'X-App-Auth': TRANSCRIPT_AUTH_TOKEN },
-      },
-    );
-
-    if (!response.ok) {
-      console.warn(`[Transcript] Worker returned ${response.status}`);
-      return { text: null, error: `Worker error: ${response.status}` };
-    }
-
-    const data = await response.json() as { text?: string; error?: string };
-
-    if (data.error) {
-      console.warn(`[Transcript] Worker error:`, data.error);
-      return { text: null, error: data.error };
-    }
-
-    if (data.text && data.text.length > 0) {
-      const trimmed = trimTranscript(data.text);
-      console.log(`[Transcript] Worker success: ${trimmed.length} chars`);
-      return { text: trimmed };
-    }
-
-    return { text: null, error: 'Empty transcript' };
-  } catch (e) {
-    console.warn('[Transcript] Worker fetch failed:', e);
-    return { text: null, error: e instanceof Error ? e.message : 'Fetch failed' };
-  }
 }
 
 /**
@@ -79,116 +35,59 @@ export function extractVideoId(url: string): string | null {
 }
 
 /**
- * Decode common XML/HTML entities in caption text
- */
-function decodeEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) =>
-      String.fromCodePoint(parseInt(hex, 16)),
-    )
-    .replace(/&#(\d+);/g, (_, dec) =>
-      String.fromCodePoint(parseInt(dec, 10)),
-    );
-}
-
-/**
- * Fetch transcript from YouTube using the browser's fetch (no CORS issues
- * because we use a CORS proxy or the innertube API which allows cross-origin).
+ * Fetch transcript via Cloudflare Worker proxy.
+ * This is the sole transcript fetching method — no direct YouTube API calls
+ * are made from the browser to avoid CORS issues.
  *
- * Strategy:
- * 1. Call YouTube's innertube player API to get caption track URLs
- * 2. Fetch the caption XML
- * 3. Parse and return text
+ * Returns the transcript text or null if unavailable.
  */
-export async function fetchTranscriptFromBrowser(
+export async function fetchTranscriptViaWorker(
   videoId: string,
-): Promise<string | null> {
+): Promise<{ text: string | null; error?: string }> {
+  if (!TRANSCRIPT_WORKER_URL) {
+    console.warn('[Transcript] Worker URL not configured (VITE_TRANSCRIPT_WORKER_URL is empty)');
+    return { text: null, error: 'Worker URL not configured' };
+  }
+
+  const fetchUrl = `${TRANSCRIPT_WORKER_URL}?videoId=${videoId}`;
+
+  console.log('[Transcript] Fetching transcript from:', fetchUrl);
+  console.log('[Transcript] Auth token present:', !!TRANSCRIPT_AUTH_TOKEN);
+
   try {
-    console.log(`[Transcript] Fetching transcript for ${videoId} via innertube API`);
-
-    // Use YouTube's innertube player API (publicly accessible, no CORS issues)
-    const playerResponse = await fetch(
-      'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          context: {
-            client: {
-              clientName: 'WEB',
-              clientVersion: '2.20240101.00.00',
-            },
-          },
-          videoId,
-        }),
+    const response = await fetch(fetchUrl, {
+      method: 'GET',
+      headers: {
+        'X-App-Auth': TRANSCRIPT_AUTH_TOKEN,
       },
-    );
+    });
 
-    if (!playerResponse.ok) {
-      console.warn(`[Transcript] Player API returned ${playerResponse.status}`);
-      return null;
+    console.log('[Transcript] Response status:', response.status, 'ok:', response.ok);
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.warn(`[Transcript] Worker returned ${response.status}:`, errorText);
+      return { text: null, error: `Worker error: ${response.status}` };
     }
 
-    const playerData = await playerResponse.json();
+    const data = await response.json() as { text?: string; error?: string };
 
-    // Extract caption tracks
-    const captionTracks =
-      playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    console.log('[Transcript] Response data - text present:', !!data.text, 'text length:', data.text?.length ?? 0, 'error:', data.error ?? 'none');
 
-    if (!captionTracks || captionTracks.length === 0) {
-      console.warn('[Transcript] No caption tracks found');
-      return null;
+    if (data.error) {
+      console.warn('[Transcript] Worker returned error:', data.error);
+      return { text: null, error: data.error };
     }
 
-    console.log(
-      `[Transcript] Found ${captionTracks.length} tracks: ${captionTracks.map((t: { languageCode: string }) => t.languageCode).join(', ')}`,
-    );
-
-    // Pick best track: ja > en > first available
-    const track =
-      captionTracks.find((t: { languageCode: string }) => t.languageCode === 'ja') ||
-      captionTracks.find((t: { languageCode: string }) => t.languageCode?.startsWith('ja')) ||
-      captionTracks.find((t: { languageCode: string }) => t.languageCode === 'en') ||
-      captionTracks[0];
-
-    if (!track?.baseUrl) {
-      console.warn('[Transcript] No baseUrl in track');
-      return null;
+    if (data.text && data.text.length > 0) {
+      const trimmed = trimTranscript(data.text);
+      console.log(`[Transcript] Success: ${trimmed.length} chars (trimmed from ${data.text.length})`);
+      return { text: trimmed };
     }
 
-    // Fetch caption XML
-    const captionResponse = await fetch(track.baseUrl);
-    if (!captionResponse.ok) {
-      console.warn(`[Transcript] Caption XML fetch returned ${captionResponse.status}`);
-      return null;
-    }
-
-    const xml = await captionResponse.text();
-
-    // Parse XML: extract text from <text> elements
-    const texts = [...xml.matchAll(/<text[^>]*>([^<]*)<\/text>/g)]
-      .map((m) => decodeEntities(m[1]))
-      .filter((t) => t.trim().length > 0)
-      .join(' ')
-      .trim();
-
-    if (texts.length < 100) {
-      console.warn(`[Transcript] Text too short: ${texts.length} chars`);
-      return null;
-    }
-
-    console.log(
-      `[Transcript] Success: ${texts.length} chars (lang=${track.languageCode})`,
-    );
-    return texts;
+    return { text: null, error: 'Empty transcript' };
   } catch (e) {
-    console.warn('[Transcript] Browser fetch failed:', e);
-    return null;
+    console.error('[Transcript] Worker fetch failed:', e);
+    return { text: null, error: e instanceof Error ? e.message : 'Fetch failed' };
   }
 }

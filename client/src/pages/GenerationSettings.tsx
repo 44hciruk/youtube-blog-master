@@ -6,7 +6,6 @@ import { Tooltip } from '../components/Tooltip';
 import {
   extractVideoId,
   fetchTranscriptViaWorker,
-  fetchTranscriptFromBrowser,
 } from '../lib/youtubeTranscript';
 
 type TranscriptStatus = 'idle' | 'fetching' | 'success' | 'failed';
@@ -54,7 +53,7 @@ export default function GenerationSettings() {
       setTranscriptStatus('fetching');
       setStatusMessage('字幕を取得中...');
 
-      // Strategy 1: Cloudflare Worker
+      // Fetch via Cloudflare Worker (sole transcript source)
       const workerResult = await fetchTranscriptViaWorker(videoId);
       if (workerResult.text) {
         setFetchedTranscript(workerResult.text);
@@ -63,20 +62,7 @@ export default function GenerationSettings() {
         return;
       }
 
-      // Strategy 2: Browser innertube API
-      try {
-        const browserResult = await fetchTranscriptFromBrowser(videoId);
-        if (browserResult) {
-          setFetchedTranscript(browserResult);
-          setTranscriptStatus('success');
-          setStatusMessage(`字幕を取得しました（${browserResult.length.toLocaleString()}文字）`);
-          return;
-        }
-      } catch {
-        console.warn('[Generate] Browser transcript fetch also failed');
-      }
-
-      // Both failed
+      // Worker failed
       setTranscriptStatus('failed');
       setStatusMessage('');
       setShowManualFallback(true);
