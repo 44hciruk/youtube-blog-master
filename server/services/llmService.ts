@@ -110,9 +110,9 @@ export async function transformToUserVoice(
   const openai = getOpenAIClient(apiKey);
 
   const toneInstructions: Record<string, string> = {
-    casual: 'カジュアルでフレンドリーな話し言葉。「〜だよ」「〜じゃん」「マジで」など親しみやすい表現を使う。友人に語りかけるような軽いトーン。',
-    polite: '丁寧語ベースで、読者への寄り添いを感じさせる親しみやすいアドバイザーとして語る。「〜です」「〜ますよね」のような柔らかい表現。',
-    professional: 'より強い表現、確信を持った断定的な言い方で。プロフェッショナルな権威を持って語る。専門家としての信頼感を重視。',
+    casual: '友達に話しかけるようなフランクな口調で書いてください。「〜だよね」「〜してみて」「〜なんだ」のような話し言葉を積極的に使ってください。敬語は使わないでください。',
+    polite: 'です・ます調の丁寧な文体で書いてください。「〜です」「〜ます」「〜でしょう」を使い、読者に敬意を持った表現にしてください。',
+    professional: '専門用語を多用し、である調で書いてください。「〜である」「〜といえる」「〜が求められる」のような硬い文体にしてください。読者は業界関係者を想定してください。',
   };
   const toneInstruction = toneInstructions[tone] || toneInstructions.polite;
 

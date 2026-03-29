@@ -38,7 +38,7 @@ function UserAvatar({ userName, onLogout }: { userName: string; onLogout: () => 
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="w-8 h-8 rounded-full bg-[#2563EB] text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#1D4ED8] transition-colors"
+        className="w-8 h-8 rounded-full bg-[#7C3AED] text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#6D28D9] transition-colors"
         aria-label="ユーザーメニュー"
       >
         {getAvatarInitial(userName)}

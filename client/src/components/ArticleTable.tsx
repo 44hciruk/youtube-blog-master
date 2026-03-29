@@ -6,6 +6,23 @@ interface Article {
   status: 'draft' | 'completed' | null;
   generatedAt: Date | string | null;
   sourceVideoId?: string;
+  tone?: string | null;
+}
+
+const TONE_LABELS: Record<string, string> = {
+  casual: 'カジュアル',
+  polite: '丁寧語',
+  professional: '専門的',
+};
+
+function formatDateTime(date: Date | string): string {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${y}/${m}/${day} ${h}:${min}`;
 }
 
 interface ArticleTableProps {
@@ -49,6 +66,11 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
                     >
                       {article.title}
                     </button>
+                    {article.tone && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F4F6] text-[#6B7280] border border-[#E5E7EB] flex-shrink-0">
+                        {TONE_LABELS[article.tone] || article.tone}
+                      </span>
+                    )}
                     {article.sourceVideoUrl && (
                       <a
                         href={article.sourceVideoUrl}
@@ -67,7 +89,7 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
                 </td>
                 <td className="py-3 px-4 text-[#6B7280] text-sm font-mono">
                   {article.generatedAt
-                    ? new Date(article.generatedAt).toLocaleDateString('ja-JP')
+                    ? formatDateTime(article.generatedAt)
                     : '-'}
                 </td>
                 <td className="py-3 px-4 text-right text-[#6B7280] text-sm font-mono">
@@ -87,13 +109,18 @@ export function ArticleTable({ articles, onEdit, onDelete, onExport }: ArticleTa
         {articles.map((article) => (
           <div key={article.id} className="border border-[#E5E7EB] rounded-lg p-3 bg-white">
             <div className="flex items-start justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={() => onEdit(article.id)}
                   className="text-sm font-medium text-[#2563EB] hover:text-[#1D4ED8] text-left leading-snug"
                 >
                   {article.title}
                 </button>
+                {article.tone && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F4F6] text-[#6B7280] border border-[#E5E7EB] flex-shrink-0">
+                    {TONE_LABELS[article.tone] || article.tone}
+                  </span>
+                )}
                 {article.sourceVideoUrl && (
                   <a
                     href={article.sourceVideoUrl}

@@ -27,6 +27,12 @@ const RETRY_DELAY_MS = 2000;
 /** Minimum keyword density (%) to highlight as SEO-effective */
 const SEO_DENSITY_THRESHOLD = 1.0;
 
+const TONE_LABELS: Record<string, string> = {
+  casual: 'カジュアル',
+  polite: '丁寧語',
+  professional: '専門的',
+};
+
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
@@ -175,6 +181,7 @@ export default function ArticleEditor() {
   const [markdown, setMarkdown] = useState('');
   const [title, setTitle] = useState('');
   const [sourceVideoUrl, setSourceVideoUrl] = useState('');
+  const [articleTone, setArticleTone] = useState('');
   const [metaDescription, setMetaDescription] = useState('');
   const [images, setImages] = useState<SavedImage[]>([]);
   const [imagePrompts, setImagePrompts] = useState<ImagePromptData[]>([]);
@@ -232,6 +239,7 @@ export default function ArticleEditor() {
       setMarkdown(articleQuery.data.markdownContent);
       setTitle(articleQuery.data.title);
       setSourceVideoUrl((articleQuery.data as Record<string, unknown>).sourceVideoUrl as string || '');
+      setArticleTone((articleQuery.data as Record<string, unknown>).tone as string || '');
       setMetaDescription((articleQuery.data as Record<string, unknown>).metaDescription as string || '');
       setImages((articleQuery.data.images as SavedImage[] | null) ?? []);
     }
@@ -460,22 +468,31 @@ export default function ArticleEditor() {
           </button>
         </div>
 
-        {/* Source Video URL */}
-        {sourceVideoUrl && (
+        {/* Source Video URL + Tone badge */}
+        {(sourceVideoUrl || articleTone) && (
           <div className="flex items-center gap-1.5 -mt-1 min-w-0 overflow-hidden whitespace-nowrap">
-            <svg className="w-3 h-3 text-[#6B7280] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
-              <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white"/>
-            </svg>
-            <span className="text-xs text-[#6B7280] flex-shrink-0">元動画：</span>
-            <a
-              href={sourceVideoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-[#6B7280] hover:text-[#2563EB] hover:underline truncate"
-            >
-              {sourceVideoUrl}
-            </a>
+            {articleTone && (
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#F3F4F6] text-[#6B7280] border border-[#E5E7EB] flex-shrink-0">
+                {TONE_LABELS[articleTone] || articleTone}
+              </span>
+            )}
+            {sourceVideoUrl && (
+              <>
+                <svg className="w-3 h-3 text-[#6B7280] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
+                  <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white"/>
+                </svg>
+                <span className="text-xs text-[#6B7280] flex-shrink-0">元動画：</span>
+                <a
+                  href={sourceVideoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-[#6B7280] hover:text-[#2563EB] hover:underline truncate"
+                >
+                  {sourceVideoUrl}
+                </a>
+              </>
+            )}
           </div>
         )}
 
