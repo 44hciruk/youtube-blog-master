@@ -62,11 +62,12 @@ export default function GenerationSettings() {
         return;
       }
 
-      // Worker failed
+      // Worker failed — show detailed error, don't assume "subtitle off"
+      console.error('[GenerationSettings] Transcript fetch failed:', workerResult.error);
       setTranscriptStatus('failed');
       setStatusMessage('');
       setShowManualFallback(true);
-      showToast('字幕がオフの動画です。手動ペーストまたはメタデータのみで生成します', 'error');
+      showToast(`字幕取得に失敗しました（${workerResult.error || '不明なエラー'}）。手動ペーストまたはメタデータで生成できます`, 'error');
     };
 
     fetchTranscript();

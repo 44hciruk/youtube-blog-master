@@ -8,6 +8,20 @@
 const MAX_TRANSCRIPT_LENGTH = 30000;
 
 /**
+ * Worker URL and auth token.
+ * Vite replaces import.meta.env.VITE_* at build time.
+ * Hardcoded fallbacks ensure the values are always available,
+ * even if env vars are missing during the build.
+ */
+const WORKER_URL =
+  import.meta.env.VITE_TRANSCRIPT_WORKER_URL ||
+  'https://youtube-transcript-proxy.kurich44.workers.dev';
+
+const AUTH_TOKEN =
+  import.meta.env.VITE_TRANSCRIPT_AUTH_TOKEN ||
+  'tbg-secret-2026';
+
+/**
  * Trim transcript to max length with graceful suffix
  */
 function trimTranscript(text: string): string {
@@ -34,70 +48,69 @@ export function extractVideoId(url: string): string | null {
 
 /**
  * Fetch transcript via Cloudflare Worker proxy.
- * This is the sole transcript fetching method — no direct YouTube API calls
- * are made from the browser to avoid CORS issues.
- *
- * Returns the transcript text or null if unavailable.
+ * This is the sole transcript fetching method.
+ * videoId が取得できていれば、必ず Worker へ fetch を実行する。
  */
 export async function fetchTranscriptViaWorker(
   videoId: string,
 ): Promise<{ text: string | null; error?: string }> {
-  // Read env vars at call time (not module load time) to ensure Vite has injected them
-  const workerUrl = import.meta.env.VITE_TRANSCRIPT_WORKER_URL || '';
-  const authToken = import.meta.env.VITE_TRANSCRIPT_AUTH_TOKEN || 'tbg-secret-2026';
-
-  if (!workerUrl) {
-    console.error('[Transcript] VITE_TRANSCRIPT_WORKER_URL is not set');
-    return { text: null, error: 'Worker URL not configured' };
-  }
-
-  // Build URL — ensure no trailing slash before query params
-  const cleanUrl = workerUrl.replace(/\/+$/, '');
+  // Build URL — strip trailing slashes, append query param
+  const cleanUrl = WORKER_URL.replace(/\/+$/, '');
   const fetchUrl = `${cleanUrl}?videoId=${videoId}`;
 
   console.log('[Transcript] === Fetch Start ===');
-  console.log('[Transcript] Full URL:', fetchUrl);
-  console.log('[Transcript] Auth token:', authToken ? `${authToken.substring(0, 4)}...` : '(empty)');
+  console.log('[Transcript] URL:', fetchUrl);
+  console.log('[Transcript] X-App-Auth:', AUTH_TOKEN);
 
   try {
     const response = await fetch(fetchUrl, {
       method: 'GET',
       headers: {
-        'X-App-Auth': authToken,
+        'X-App-Auth': 'tbg-secret-2026',
       },
     });
 
-    console.log('[Transcript] Response status:', response.status, 'ok:', response.ok);
+    console.log('[Transcript] Response:', response.status, response.statusText);
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => '(could not read body)');
-      console.error('[Transcript] Worker error response:', {
+      console.error('[Transcript] HTTP Error:', {
         status: response.status,
         statusText: response.statusText,
         body: errorBody,
+        url: fetchUrl,
       });
-      return { text: null, error: `Worker error: ${response.status} - ${errorBody}` };
+      return { text: null, error: `HTTP ${response.status}: ${errorBody}` };
     }
 
-    const data = await response.json() as { text?: string; error?: string };
+    const raw = await response.text();
+    console.log('[Transcript] Raw response length:', raw.length, 'preview:', raw.substring(0, 200));
 
-    console.log('[Transcript] Parsed response - text:', !!data.text, 'length:', data.text?.length ?? 0, 'error:', data.error ?? 'none');
+    let data: { text?: string; error?: string };
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      console.error('[Transcript] JSON parse failed. Raw:', raw.substring(0, 500));
+      return { text: null, error: 'Invalid JSON response from Worker' };
+    }
+
+    console.log('[Transcript] Parsed — text:', !!data.text, 'length:', data.text?.length ?? 0, 'error:', data.error ?? 'none');
 
     if (data.error) {
-      console.warn('[Transcript] Worker returned error field:', data.error);
+      console.error('[Transcript] Worker error:', data.error);
       return { text: null, error: data.error };
     }
 
     if (data.text && data.text.length > 0) {
       const trimmed = trimTranscript(data.text);
-      console.log(`[Transcript] Success: ${trimmed.length} chars`);
+      console.log(`[Transcript] SUCCESS: ${trimmed.length} chars`);
       return { text: trimmed };
     }
 
     console.warn('[Transcript] Worker returned empty text');
     return { text: null, error: 'Empty transcript' };
   } catch (e) {
-    console.error('[Transcript] Network/fetch error:', e);
+    console.error('[Transcript] Network error:', e);
     return { text: null, error: e instanceof Error ? e.message : 'Fetch failed' };
   }
 }
