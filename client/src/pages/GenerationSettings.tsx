@@ -1,30 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { trpc } from '../lib/trpc';
 import { useToast } from '../components/Toast';
 import { Tooltip } from '../components/Tooltip';
-import {
-  extractVideoId,
-  fetchTranscriptViaWorker,
-} from '../lib/youtubeTranscript';
-
-type TranscriptStatus = 'idle' | 'fetching' | 'success' | 'failed';
+import { cleanTranscriptText } from '../lib/youtubeTranscript';
 
 export default function GenerationSettings() {
   const [searchParams] = useSearchParams();
   const videoUrl = searchParams.get('url') || '';
-  const manualTranscript = searchParams.get('transcript') || '';
+  const passedTranscript = searchParams.get('transcript') || '';
   const toneParam = searchParams.get('tone') || 'polite';
   const navigate = useNavigate();
   const { showToast, ToastContainer } = useToast();
 
   const [articleLength, setArticleLength] = useState<'standard' | 'long'>('standard');
   const [keywordsText, setKeywordsText] = useState('');
-  const [transcriptStatus, setTranscriptStatus] = useState<TranscriptStatus>('idle');
-  const [statusMessage, setStatusMessage] = useState('');
-  const [showManualFallback, setShowManualFallback] = useState(false);
-  const [manualText, setManualText] = useState(manualTranscript || '');
-  const [fetchedTranscript, setFetchedTranscript] = useState<string | null>(null);
+  const [transcriptText, setTranscriptText] = useState(passedTranscript || '');
+  const [showGuide, setShowGuide] = useState(false);
 
   const generateMutation = trpc.article.generate.useMutation({
     onSuccess: (data) => {
@@ -32,8 +24,6 @@ export default function GenerationSettings() {
       navigate(`/editor/${data.articleId}`);
     },
     onError: (err) => {
-      setStatusMessage('');
-      setTranscriptStatus('idle');
       showToast(err.message, 'error');
     },
   });
@@ -42,67 +32,30 @@ export default function GenerationSettings() {
     if (!videoUrl) navigate('/');
   }, [videoUrl, navigate]);
 
-  // Auto-fetch transcript on mount
-  useEffect(() => {
-    if (manualTranscript.length > 50) return; // Manual transcript provided, skip auto-fetch
+  // Handle paste — auto-clean timestamps
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text');
+    const cleaned = cleanTranscriptText(pasted);
+    setTranscriptText(cleaned);
+  }, []);
 
-    const fetchTranscript = async () => {
-      const videoId = extractVideoId(videoUrl);
-      if (!videoId) return;
-
-      setTranscriptStatus('fetching');
-      setStatusMessage('字幕を取得中...');
-
-      // Fetch via Cloudflare Worker (sole transcript source)
-      const workerResult = await fetchTranscriptViaWorker(videoId);
-      if (workerResult.text) {
-        setFetchedTranscript(workerResult.text);
-        setTranscriptStatus('success');
-        setStatusMessage(`字幕を取得しました（${workerResult.text.length.toLocaleString()}文字）`);
-        return;
-      }
-
-      // Worker failed — show detailed error, don't assume "subtitle off"
-      console.error('[GenerationSettings] Transcript fetch failed:', workerResult.error);
-      setTranscriptStatus('failed');
-      setStatusMessage('');
-      setShowManualFallback(true);
-      showToast(`字幕取得に失敗しました（${workerResult.error || '不明なエラー'}）。手動ペーストまたはメタデータで生成できます`, 'error');
-    };
-
-    fetchTranscript();
-  }, [videoUrl]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleGenerate = async () => {
+  const handleGenerate = () => {
     const seoKeywords = keywordsText
       .split(/[,、]/)
       .map((k) => k.trim())
       .filter(Boolean);
 
-    // Determine transcript source
-    let transcript: string | undefined;
-
-    if (manualTranscript.length > 50) {
-      transcript = manualTranscript;
-      setStatusMessage('手動入力の字幕を使用して生成中...');
-    } else if (manualText.trim().length > 50) {
-      transcript = manualText.trim();
-      setStatusMessage('手動ペーストの字幕を使用して生成中...');
-    } else if (fetchedTranscript) {
-      transcript = fetchedTranscript;
-      setStatusMessage('記事を生成中（字幕あり）...');
-    } else {
-      setStatusMessage('記事を生成中...');
-    }
-
-    setTranscriptStatus(transcript ? 'success' : 'failed');
+    const transcript = transcriptText.trim().length > 50
+      ? transcriptText.trim()
+      : undefined;
 
     generateMutation.mutate({
       videoUrl,
       tone: toneParam as 'casual' | 'polite' | 'professional',
       articleLength,
       seoKeywords,
-      transcript: transcript || undefined,
+      transcript,
     });
   };
 
@@ -112,9 +65,6 @@ export default function GenerationSettings() {
       .map((k) => k.trim())
       .filter(Boolean);
 
-    setTranscriptStatus('failed');
-    setStatusMessage('記事を生成中...');
-
     generateMutation.mutate({
       videoUrl,
       tone: toneParam as 'casual' | 'polite' | 'professional',
@@ -123,7 +73,7 @@ export default function GenerationSettings() {
     });
   };
 
-  const isProcessing = generateMutation.isPending || transcriptStatus === 'fetching';
+  const isProcessing = generateMutation.isPending;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -141,53 +91,47 @@ export default function GenerationSettings() {
         対象動画: {videoUrl}
       </div>
 
-      {/* Transcript status */}
-      {manualTranscript && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
-          手動入力の字幕テキストを使用します（{manualTranscript.length}文字）
+      {/* Transcript Paste Area — main feature */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="mb-1">
+          <h3 className="font-semibold text-gray-900">字幕テキストを貼り付け</h3>
+          <p className="text-xs text-[#6B7280] mt-0.5">字幕を入れると記事の精度が大幅に向上します</p>
         </div>
-      )}
 
-      {!manualTranscript && transcriptStatus === 'success' && statusMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
-          {statusMessage}
-        </div>
-      )}
+        {/* How-to accordion */}
+        <button
+          onClick={() => setShowGuide(!showGuide)}
+          className="flex items-center gap-1.5 text-xs text-[#2563EB] hover:text-[#1D4ED8] mt-2 mb-2"
+        >
+          <svg className={`w-3 h-3 transition-transform ${showGuide ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+          貼り付け方法を見る
+        </button>
+        {showGuide && (
+          <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg p-3 mb-3 text-xs text-[#374151] space-y-1.5">
+            <ol className="list-decimal list-inside space-y-1">
+              <li>YouTube動画ページを開く</li>
+              <li>動画の下の「<strong>...</strong>」→「<strong>文字起こしを表示</strong>」をクリック</li>
+              <li>表示されたテキストを全選択（Ctrl+A）してコピー</li>
+              <li>この欄に貼り付け</li>
+            </ol>
+            <p className="text-[#9CA3AF]">※ タイムスタンプは自動で除去されます</p>
+          </div>
+        )}
 
-      {!manualTranscript && transcriptStatus === 'fetching' && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-          <span className="flex items-center gap-2">
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            字幕を取得中...
-          </span>
-        </div>
-      )}
-
-      {/* Manual fallback area */}
-      {showManualFallback && !manualTranscript && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 space-y-3">
-          <p className="text-sm text-yellow-800">
-            字幕の自動取得に失敗しました。YouTubeの「文字起こし」からテキストをコピーして貼り付けると、記事の精度が向上します。
-          </p>
-          <textarea
-            value={manualText}
-            onChange={(e) => setManualText(e.target.value)}
-            placeholder="字幕テキストを貼り付け（任意）..."
-            className="w-full px-3 py-2 border border-yellow-300 rounded-lg text-sm resize-vertical outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 bg-white"
-            rows={4}
-          />
-          <button
-            onClick={handleGenerateWithoutTranscript}
-            disabled={isProcessing}
-            className="w-full py-2 text-sm border border-yellow-400 text-yellow-800 rounded-lg hover:bg-yellow-100 transition-colors disabled:opacity-50"
-          >
-            字幕なしで生成する
-          </button>
-        </div>
-      )}
+        <textarea
+          value={transcriptText}
+          onChange={(e) => setTranscriptText(e.target.value)}
+          onPaste={handlePaste}
+          placeholder="YouTubeの文字起こしテキストをここに貼り付け..."
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-vertical outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          style={{ minHeight: '120px' }}
+        />
+        {transcriptText.trim().length > 0 && (
+          <p className="text-xs text-[#6B7280] mt-1">{transcriptText.trim().length.toLocaleString()}文字</p>
+        )}
+      </div>
 
       {/* Article Length */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
@@ -232,19 +176,6 @@ export default function GenerationSettings() {
         />
       </div>
 
-      {/* Status message during generation */}
-      {generateMutation.isPending && statusMessage && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-          <span className="flex items-center gap-2">
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            {statusMessage}
-          </span>
-        </div>
-      )}
-
       {/* Generate Button */}
       <button
         onClick={handleGenerate}
@@ -263,6 +194,20 @@ export default function GenerationSettings() {
           '生成開始'
         )}
       </button>
+
+      {/* Generate without transcript — ghost button */}
+      {transcriptText.trim().length === 0 && !isProcessing && (
+        <div className="text-center">
+          <button
+            onClick={handleGenerateWithoutTranscript}
+            disabled={isProcessing}
+            className="text-xs text-[#9CA3AF] hover:text-[#6B7280] transition-colors disabled:opacity-50"
+          >
+            字幕なしで生成する
+          </button>
+          <p className="text-[11px] text-[#9CA3AF] mt-0.5">動画のメタデータのみで記事を生成します</p>
+        </div>
+      )}
     </div>
   );
 }
